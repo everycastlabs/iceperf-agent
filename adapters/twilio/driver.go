@@ -34,12 +34,6 @@ type TwilioResponse struct {
 func (d *Driver) GetIceServers() (iceServers []webrtc.ICEServer, err error) {
 	client := &http.Client{}
 
-	if err != nil {
-		log.WithFields(log.Fields{
-			"error": err,
-		}).Error("Error forming http request URL")
-		return nil, err
-	}
 	req, err := http.NewRequest("POST", d.Config.RequestUrl, nil)
 	req.SetBasicAuth(d.Config.HttpUsername, d.Config.HttpPassword)
 
@@ -79,6 +73,8 @@ func (d *Driver) GetIceServers() (iceServers []webrtc.ICEServer, err error) {
 	responseServers := TwilioResponse{}
 	json.Unmarshal([]byte(responseData), &responseServers)
 
+	tempTurnHost := ""
+
 	for _, r := range responseServers.IceServers {
 
 		info, err := stun.ParseURI(r.URL)
@@ -89,6 +85,10 @@ func (d *Driver) GetIceServers() (iceServers []webrtc.ICEServer, err error) {
 
 		if ((info.Scheme == stun.SchemeTypeTURN || info.Scheme == stun.SchemeTypeTURNS) && !d.Config.TurnEnabled) || ((info.Scheme == stun.SchemeTypeSTUN || info.Scheme == stun.SchemeTypeSTUNS) && !d.Config.StunEnabled) {
 			continue
+		}
+
+		if (info.Scheme == stun.SchemeTypeTURN) {
+			tempTurnHost = info.Host
 		}
 
 		s := webrtc.ICEServer{
@@ -103,6 +103,22 @@ func (d *Driver) GetIceServers() (iceServers []webrtc.ICEServer, err error) {
 		}
 		iceServers = append(iceServers, s)
 	}
+
+
+
+	//apparently if you go and make a tls turn uri it will work
+	s := webrtc.ICEServer{
+		URLs: []string{"turns:" + tempTurnHost + ":5349?transport=tcp"},
+	}
+
+	if responseServers.Username != "" {
+		s.Username = responseServers.Username
+	}
+	if responseServers.Password != "" {
+		s.Credential = responseServers.Password
+	}
+
+	iceServers = append(iceServers, s)
 
 	return iceServers, nil
 }
