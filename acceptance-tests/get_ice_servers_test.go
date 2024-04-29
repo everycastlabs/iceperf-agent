@@ -5,13 +5,13 @@ import (
 	"testing"
 
 	"github.com/alecthomas/assert/v2"
-	"github.com/nimbleape/go-relay-perf-com-tests/adapters/cloudflare"
-	"github.com/nimbleape/go-relay-perf-com-tests/adapters/expressturn"
-	"github.com/nimbleape/go-relay-perf-com-tests/adapters/metered"
-	"github.com/nimbleape/go-relay-perf-com-tests/adapters/twilio"
-	"github.com/nimbleape/go-relay-perf-com-tests/adapters/xirsys"
-	"github.com/nimbleape/go-relay-perf-com-tests/config"
-	"github.com/nimbleape/go-relay-perf-com-tests/specifications"
+	"github.com/nimbleape/iceperf-agent/adapters/cloudflare"
+	"github.com/nimbleape/iceperf-agent/adapters/expressturn"
+	"github.com/nimbleape/iceperf-agent/adapters/metered"
+	"github.com/nimbleape/iceperf-agent/adapters/twilio"
+	"github.com/nimbleape/iceperf-agent/adapters/xirsys"
+	"github.com/nimbleape/iceperf-agent/config"
+	"github.com/nimbleape/iceperf-agent/specifications"
 )
 
 func TestMeteredICEServers(t *testing.T) {

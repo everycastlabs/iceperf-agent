@@ -1,4 +1,4 @@
-module github.com/nimbleape/go-relay-perf-com-tests
+module github.com/nimbleape/iceperf-agent
 
 go 1.21.6
 

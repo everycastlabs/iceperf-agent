@@ -9,9 +9,9 @@ import (
 
 	"github.com/alecthomas/assert/v2"
 	"github.com/joho/godotenv"
-	"github.com/nimbleape/go-relay-perf-com-tests/adapters/serverconnect"
-	"github.com/nimbleape/go-relay-perf-com-tests/adapters/webrtcpeerconnect"
-	"github.com/nimbleape/go-relay-perf-com-tests/specifications"
+	"github.com/nimbleape/iceperf-agent/adapters/serverconnect"
+	"github.com/nimbleape/iceperf-agent/adapters/webrtcpeerconnect"
+	"github.com/nimbleape/iceperf-agent/specifications"
 	"github.com/pion/webrtc/v4"
 )
 

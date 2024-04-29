@@ -5,8 +5,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/nimbleape/go-relay-perf-com-tests/config"
-	"github.com/nimbleape/go-relay-perf-com-tests/util"
+	"github.com/nimbleape/iceperf-agent/config"
+	"github.com/nimbleape/iceperf-agent/util"
 	"github.com/pion/stun/v2"
 	"github.com/pion/webrtc/v4"
 	log "github.com/sirupsen/logrus"
