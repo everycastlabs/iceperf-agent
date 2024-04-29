@@ -3,7 +3,7 @@ package google
 import (
 	"fmt"
 
-	"github.com/nimbleape/go-relay-perf-com-tests/config"
+	"github.com/nimbleape/iceperf-agent/config"
 	"github.com/pion/webrtc/v4"
 )
 

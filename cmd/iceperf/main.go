@@ -9,9 +9,9 @@ import (
 	"os"
 	"time"
 
-	"github.com/nimbleape/go-relay-perf-com-tests/client"
-	"github.com/nimbleape/go-relay-perf-com-tests/config"
-	"github.com/nimbleape/go-relay-perf-com-tests/version"
+	"github.com/nimbleape/iceperf-agent/client"
+	"github.com/nimbleape/iceperf-agent/config"
+	"github.com/nimbleape/iceperf-agent/version"
 	"github.com/pion/stun/v2"
 	"github.com/pion/webrtc/v4"
 	"github.com/rs/xid"
