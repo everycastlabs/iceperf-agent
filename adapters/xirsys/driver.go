@@ -34,7 +34,7 @@ type XirsysResponse struct {
 func (d *Driver) GetIceServers() (iceServers []webrtc.ICEServer, err error) {
 	client := &http.Client{}
 
-	req, err := http.NewRequest("PUT", d.Config.RequestUrl, strings.NewReader(`{"format": "urls"}`))
+	req, err := http.NewRequest("PUT", d.Config.RequestUrl, strings.NewReader(`{"format": "urls", "expire": "1800"}`))
 	req.SetBasicAuth(d.Config.HttpUsername, d.Config.HttpPassword)
 	req.Header.Add("Content-Type", "application/json")
 
