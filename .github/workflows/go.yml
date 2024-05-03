@@ -71,7 +71,7 @@ jobs:
       run: go get ./cmd/iceperf
 
     - name: Build
-      run: go build ./cmd/iceperf -o ${{ matrix.binary-name }}
+      run: go build -o ${{ matrix.binary-name }} ./cmd/iceperf
 
     - name: Release
       uses: softprops/action-gh-release@v2
