@@ -56,7 +56,7 @@ jobs:
             binary-name: iceperf-darwin-arm64
           - os: windows-latest
             binary-name: iceperf-windows-x86-64
-          - os: ubuntu-latest-m
+          - os: ubuntu-latest
             binary-name: iceperf-linux-x86-64
     runs-on: ${{ matrix.os }}
     steps:
