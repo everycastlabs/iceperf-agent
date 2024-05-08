@@ -88,6 +88,7 @@ func (cp *ConnectionPair) createOfferer(config webrtc.Configuration) {
 	ordered := false
 	maxRetransmits := uint16(0)
 	hasSentData := false
+	var totalBytesSent uint64
 
 	options := &webrtc.DataChannelInit{
 		Ordered:        &ordered,
@@ -118,6 +119,14 @@ func (cp *ConnectionPair) createOfferer(config webrtc.Configuration) {
 				err2 := dc.Send(buf)
 				util.Check(err2)
 
+				n := len(buf)
+				atomic.AddUint64(&totalBytesSent, uint64(n))
+				// cp.LogOfferer.WithFields(log.Fields{
+				// 	"dataChannelLabel": dc.Label(),
+				// 	"dataChannelId":    dc.ID(),
+				// 	"length": n,
+				// }).Info("sent bytes n")
+
 				if dc.BufferedAmount() > maxBufferedAmount {
 					// Wait until the bufferedAmount becomes lower than the threshold
 					<-sendMoreCh
@@ -138,6 +147,13 @@ func (cp *ConnectionPair) createOfferer(config webrtc.Configuration) {
 			default:
 			}
 		})
+
+		dc.OnClose(func() {
+			cp.LogAnswerer.WithFields(log.Fields{
+				"sentBytesTotal": float64(atomic.LoadUint64(&totalBytesSent)),
+			}).Info("Sent total")
+		})
+
 	}
 	cp.OfferPC = pc
 }
@@ -193,7 +209,12 @@ func (cp *ConnectionPair) createAnswerer(config webrtc.Configuration) {
 				}
 				n := len(dcMsg.Data)
 				atomic.AddUint64(&totalBytesReceived, uint64(n))
+			})
 
+			dc.OnClose(func() {
+				cp.LogAnswerer.WithFields(log.Fields{
+					"receivedBytesTotal": float64(atomic.LoadUint64(&totalBytesReceived)*8),
+				}).Info("Received total")
 			})
 		})
 	}
