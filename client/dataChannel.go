@@ -2,7 +2,6 @@ package client
 
 import (
 	"encoding/json"
-	"sync/atomic"
 	"time"
 
 	"github.com/nimbleape/iceperf-agent/config"
@@ -88,7 +87,6 @@ func (cp *ConnectionPair) createOfferer(config webrtc.Configuration) {
 	ordered := false
 	maxRetransmits := uint16(0)
 	hasSentData := false
-	var totalBytesSent uint64
 
 	options := &webrtc.DataChannelInit{
 		Ordered:        &ordered,
@@ -119,14 +117,6 @@ func (cp *ConnectionPair) createOfferer(config webrtc.Configuration) {
 				err2 := dc.Send(buf)
 				util.Check(err2)
 
-				n := len(buf)
-				atomic.AddUint64(&totalBytesSent, uint64(n))
-				// cp.LogOfferer.WithFields(log.Fields{
-				// 	"dataChannelLabel": dc.Label(),
-				// 	"dataChannelId":    dc.ID(),
-				// 	"length": n,
-				// }).Info("sent bytes n")
-
 				if dc.BufferedAmount() > maxBufferedAmount {
 					// Wait until the bufferedAmount becomes lower than the threshold
 					<-sendMoreCh
@@ -149,8 +139,10 @@ func (cp *ConnectionPair) createOfferer(config webrtc.Configuration) {
 		})
 
 		dc.OnClose(func() {
+			bytesSentTotal, _ := getDataChannelBytesSent(pc, dc)
+
 			cp.LogAnswerer.WithFields(log.Fields{
-				"sentBytesTotal": float64(atomic.LoadUint64(&totalBytesSent)),
+				"sentBytesTotal": bytesSentTotal,
 			}).Info("Sent total")
 		})
 
@@ -185,15 +177,19 @@ func (cp *ConnectionPair) createAnswerer(config webrtc.Configuration) {
 					if pc.ConnectionState() != webrtc.PeerConnectionStateConnected {
 						break
 					}
-					bps := float64(atomic.LoadUint64(&totalBytesReceived)*8) / time.Since(since).Seconds()
+					bps := 8 * float64(totalBytesReceived) / float64(time.Since(since).Seconds())
+					// bps := float64(totalBytesReceived*8) / time.Since(since).Seconds()
 					cp.LogAnswerer.WithFields(log.Fields{
-						"throughput": bps / 1024 / 1024,
+						"throughput": bps / (1024*1024),
 						"eventTime":  time.Now(),
 					}).Info("On ticker: Calculated throughput")
 				}
-				bps := float64(atomic.LoadUint64(&totalBytesReceived)*8) / time.Since(since).Seconds()
+
+				bps := 8 * float64(totalBytesReceived) / float64(time.Since(since).Seconds())
+
+				// bps := float64(totalBytesReceived*8) / time.Since(since).Seconds()
 				cp.LogAnswerer.WithFields(log.Fields{
-					"throughput":       bps / 1024 / 1024,
+					"throughput":       bps / (1024*1024),
 					"eventTime":        time.Now(),
 					"timeSinceStartMs": time.Since(since).Milliseconds(),
 				}).Info("On ticker: Calculated throughput")
@@ -207,17 +203,38 @@ func (cp *ConnectionPair) createAnswerer(config webrtc.Configuration) {
 					}).Info("Received first Packet")
 					hasRecievedData = true
 				}
-				n := len(dcMsg.Data)
-				atomic.AddUint64(&totalBytesReceived, uint64(n))
+				totalBytesReceivedTmp, ok := getDataChannelBytesReceived(pc, dc)
+				if ok {
+					totalBytesReceived = totalBytesReceivedTmp
+				}
 			})
 
 			dc.OnClose(func() {
+				bytesReceivedTotal, _ := getDataChannelBytesReceived(pc, dc)
 				cp.LogAnswerer.WithFields(log.Fields{
-					"receivedBytesTotal": float64(atomic.LoadUint64(&totalBytesReceived)*8),
+					"receivedBytesTotal": bytesReceivedTotal,
 				}).Info("Received total")
 			})
 		})
 	}
 
 	cp.AnswerPC = pc
+}
+
+func getDataChannelBytesReceived(pc *webrtc.PeerConnection, dc *webrtc.DataChannel) (uint64, bool) {
+	stats := pc.GetStats()
+	dcStats, ok := stats.GetDataChannelStats(dc)
+	if !ok {
+		return 0, ok
+	}
+	return dcStats.BytesReceived, ok
+}
+
+func getDataChannelBytesSent(pc *webrtc.PeerConnection, dc *webrtc.DataChannel) (uint64, bool) {
+	stats := pc.GetStats()
+	dcStats, ok := stats.GetDataChannelStats(dc)
+	if !ok {
+		return 0, ok
+	}
+	return dcStats.BytesSent, ok
 }
