@@ -75,6 +75,14 @@ func (d *Driver) GetIceServers() (iceServers []webrtc.ICEServer, err error) {
 	responseServers := XirsysResponse{}
 	json.Unmarshal([]byte(responseData), &responseServers)
 
+	gotTransports := make(map[string]bool)
+
+	gotTransports[stun.SchemeTypeSTUN.String() + stun.ProtoTypeUDP.String()] = false
+	gotTransports[stun.SchemeTypeSTUN.String() + stun.ProtoTypeTCP.String()] = false
+	gotTransports[stun.SchemeTypeTURN.String() + stun.ProtoTypeUDP.String()] = false
+	gotTransports[stun.SchemeTypeTURN.String() + stun.ProtoTypeTCP.String()] = false
+	gotTransports[stun.SchemeTypeTURNS.String() + stun.ProtoTypeTCP.String()] = false
+
 	for _, r := range responseServers.V.IceServers.URLs {
 
 		info, err := stun.ParseURI(r)
@@ -84,6 +92,11 @@ func (d *Driver) GetIceServers() (iceServers []webrtc.ICEServer, err error) {
 		}
 
 		if ((info.Scheme == stun.SchemeTypeTURN || info.Scheme == stun.SchemeTypeTURNS) && !d.Config.TurnEnabled) || ((info.Scheme == stun.SchemeTypeSTUN || info.Scheme == stun.SchemeTypeSTUNS) && !d.Config.StunEnabled) {
+			continue
+		}
+
+		if (gotTransports[info.Scheme.String() + info.Proto.String()]) {
+			//we don't want to test all the special ports right now
 			continue
 		}
 
@@ -98,6 +111,7 @@ func (d *Driver) GetIceServers() (iceServers []webrtc.ICEServer, err error) {
 			s.Credential = responseServers.V.IceServers.Credential
 		}
 		iceServers = append(iceServers, s)
+		gotTransports[info.Scheme.String() + info.Proto.String()] = true
 	}
 
 	return iceServers, nil

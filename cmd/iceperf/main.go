@@ -166,6 +166,7 @@ func runService(ctx *cli.Context) error {
 			<-timer.C
 			iceServerLogger.Info("Calling Stop()")
 			c.Stop()
+			<-time.After(2 * time.Second)
 			iceServerLogger.Info("Finished")
 		}
 		providerLogger.Info("Provider Finished")

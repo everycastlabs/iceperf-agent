@@ -119,6 +119,17 @@ func newClient(cc *config.Config, iceServerInfo *stun.URI) (*Client, error) {
 					"eventTime":        timeOffererConnected,
 					"timeSinceStartMs": time.Since(startTime).Milliseconds(),
 				}).Info("Offerer connected")
+				//go and get the details about the ice pair
+				// stats := c.ConnectionPair.OfferPC.GetStats()
+				//find the active candidate pair
+				// for k, v := range stats {
+				// 	c.ConnectionPair.LogOfferer.WithFields(log.Fields{
+				// 		"statsKey": k,
+				// 		"statsValue": v,
+				// 		"eventTime":        timeOffererConnected,
+				// 		"timeSinceStartMs": time.Since(startTime).Milliseconds(),
+				// 	}).Info("Offerer Stats")
+				// }
 				c.OffererConnected <- true
 			case webrtc.PeerConnectionStateFailed:
 				// Wait until PeerConnection has had no network activity for 30 seconds or another failure. It may be reconnected using an ICE Restart.
