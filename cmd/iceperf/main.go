@@ -5,7 +5,7 @@ package main
 
 import (
 	"fmt"
-	"net/http"
+	"log/slog"
 	"os"
 	"time"
 
@@ -15,24 +15,15 @@ import (
 	"github.com/pion/stun/v2"
 	"github.com/pion/webrtc/v4"
 	"github.com/rs/xid"
-	"github.com/sirupsen/logrus"
-	log "github.com/sirupsen/logrus"
+
+	// slogloki "github.com/samber/slog-loki/v3"
+
+	slogmulti "github.com/samber/slog-multi"
 	"github.com/urfave/cli/v2"
-	"github.com/yukitsune/lokirus"
+
+	// "github.com/grafana/loki-client-go/loki"
+	loki "github.com/magnetde/slog-loki"
 )
-
-type transport struct {
-	authHeaders         map[string]string
-	underlyingTransport http.RoundTripper
-}
-
-func (t *transport) RoundTrip(req *http.Request) (*http.Response, error) {
-	for headerName, headerValue := range t.authHeaders {
-		req.Header.Add(headerName, headerValue)
-	}
-
-	return t.underlyingTransport.RoundTrip(req)
-}
 
 func main() {
 	app := &cli.App{
@@ -64,62 +55,105 @@ func runService(ctx *cli.Context) error {
 
 	testRunId := xid.New()
 
+	lvl := new(slog.LevelVar)
+	lvl.Set(slog.LevelInfo)
+
 	// Configure the logger
-	logg := log.New()
+
+	var logg *slog.Logger
 
 	if config.Logging.Loki.Enabled {
 
-		opts := lokirus.NewLokiHookOptions().
-			// Grafana doesn't have a "panic" level, but it does have a "critical" level
-			// https://grafana.com/docs/grafana/latest/explore/logs-integration/
-			WithLevelMap(lokirus.LevelMap{log.PanicLevel: "critical"}).
-			WithFormatter(&logrus.JSONFormatter{}).
-			WithStaticLabels(lokirus.Labels{
-				"app": "iceperf",
-			})
+		// config, _ := loki.NewDefaultConfig(config.Logging.Loki.URL)
+		// // config.TenantID = "xyz"
+		// client, _ := loki.New(config)
 
-		if config.Logging.Loki.UseBasicAuth {
-			opts.WithBasicAuth(config.Logging.Loki.Username, config.Logging.Loki.Password)
+		lokiHandler := loki.NewHandler(config.Logging.Loki.URL, loki.WithLabelsEnabled(loki.LabelAll...))
+
+		logg = slog.New(
+			slogmulti.Fanout(
+				slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
+					Level: slog.LevelInfo,
+				}),
+				lokiHandler,
+			),
+		).With("app", "iceperftest")
+
+		// stop loki client and purge buffers
+		defer lokiHandler.Close()
+
+		// opts := lokirus.NewLokiHookOptions().
+		// 	// Grafana doesn't have a "panic" level, but it does have a "critical" level
+		// 	// https://grafana.com/docs/grafana/latest/explore/logs-integration/
+		// 	WithLevelMap(lokirus.LevelMap{log.PanicLevel: "critical"}).
+		// 	WithFormatter(&logrus.JSONFormatter{}).
+		// 	WithStaticLabels(lokirus.Labels{
+		// 		"app": "iceperftest",
+		// 	})
+
+		// if config.Logging.Loki.UseBasicAuth {
+		// 	opts.WithBasicAuth(config.Logging.Loki.Username, config.Logging.Loki.Password)
+		// }
+
+		// if config.Logging.Loki.UseHeadersAuth {
+		// 	httpClient := &http.Client{Transport: &transport{underlyingTransport: http.DefaultTransport, authHeaders: config.Logging.Loki.AuthHeaders}}
+
+		// 	opts.WithHttpClient(httpClient)
+		// }
+
+		// hook := lokirus.NewLokiHookWithOpts(
+		// 	config.Logging.Loki.URL,
+		// 	opts,
+		// 	log.InfoLevel,
+		// 	log.WarnLevel,
+		// 	log.ErrorLevel,
+		// 	log.FatalLevel)
+
+		// logg.AddHook(hook)
+
+		// lokiHookConfig := &lokihook.Config{
+		// 	// the loki api url
+		// 	URL: config.Logging.Loki.URL,
+		// 	// (optional, default: severity) the label's key to distinguish log's level, it will be added to Labels map
+		// 	LevelName: "level",
+		// 	// the labels which will be sent to loki, contains the {levelname: level}
+		// 	Labels: map[string]string{
+		// 		"app": "iceperftest",
+		// 	},
+		// }
+		// hook, err := lokihook.NewHook(lokiHookConfig)
+		// if err != nil {
+		// 	log.Error(err)
+		// } else {
+		// 	log.AddHook(hook)
+		// }
+
+		// hook := loki.NewHook(config.Logging.Loki.URL, loki.WithLabel("app", "iceperftest"), loki.WithFormatter(&logrus.JSONFormatter{}), loki.WithLevel(log.InfoLevel))
+		// defer hook.Close()
+
+		// log.AddHook(hook)
+	} else {
+		handlerOpts := &slog.HandlerOptions{
+			Level: slog.LevelInfo,
 		}
-
-		if config.Logging.Loki.UseHeadersAuth {
-			httpClient := &http.Client{Transport: &transport{underlyingTransport: http.DefaultTransport, authHeaders: config.Logging.Loki.AuthHeaders}}
-
-			opts.WithHttpClient(httpClient)
-		}
-
-		hook := lokirus.NewLokiHookWithOpts(
-			config.Logging.Loki.URL,
-			opts,
-			log.InfoLevel,
-			log.WarnLevel,
-			log.ErrorLevel,
-			log.FatalLevel)
-
-		logg.AddHook(hook)
+		logg = slog.New(slog.NewTextHandler(os.Stderr, handlerOpts))
 	}
+	// slog.SetDefault(logg)
 
 	// logg.SetFormatter(&log.JSONFormatter{PrettyPrint: true})
-	setLogLevel(logg, config.Logging.Level)
 
-	logger := logg.WithFields(log.Fields{
-		"testRunId": testRunId,
-	})
+	logger := logg.With("testRunId", testRunId)
 
 	// TODO we will make a new client for each ICE Server URL from each provider
 	// get ICE servers and loop them
 	ICEServers, err := client.GetIceServers(config)
 	if err != nil {
-		logger.Fatal("Error getting ICE servers")
+		logger.Error("Error getting ICE servers")
+		//this should be a fatal
 	}
-	// log.WithFields(log.Fields{
-	// 	"ICEServers": ICEServers,
-	// }).Info("ICE Servers in use")
 
 	for provider, iss := range ICEServers {
-		providerLogger := logger.WithFields(log.Fields{
-			"Provider": provider,
-		})
+		providerLogger := logger.With("Provider", provider)
 
 		providerLogger.Info("Provider Starting")
 
@@ -133,17 +167,15 @@ func runService(ctx *cli.Context) error {
 
 			runId := xid.New()
 
-			iceServerLogger := providerLogger.WithFields(log.Fields{
-				"iceServerTestRunId": runId,
-				"schemeAndProtocol":  iceServerInfo.Scheme.String() + "-" + iceServerInfo.Proto.String(),
-			})
+			iceServerLogger := providerLogger.With("iceServerTestRunId", runId,
+				"schemeAndProtocol", iceServerInfo.Scheme.String()+"-"+iceServerInfo.Proto.String(),
+			)
 
-			iceServerLogger.WithFields(log.Fields{
-				"iceServerHost":     iceServerInfo.Host,
-				"iceServerProtocol": iceServerInfo.Proto.String(),
-				"iceServerPort":     iceServerInfo.Port,
-				"iceServerScheme":   iceServerInfo.Scheme.String(),
-			}).Info("Starting New Client")
+			iceServerLogger.Info("Starting New Client", "iceServerHost", iceServerInfo.Host,
+				"iceServerProtocol", iceServerInfo.Proto.String(),
+				"iceServerPort", iceServerInfo.Port,
+				"iceServerScheme", iceServerInfo.Scheme.String(),
+			)
 			config.Logger = iceServerLogger
 
 			config.WebRTCConfig.ICEServers = []webrtc.ICEServer{is}
@@ -201,21 +233,21 @@ func getConfig(c *cli.Context) (*config.Config, error) {
 	return conf, nil
 }
 
-func setLogLevel(logger *log.Logger, level string) {
-	switch level {
-	case "debug":
-		logger.SetLevel(log.DebugLevel)
-	case "error":
-		logger.SetLevel(log.ErrorLevel)
-	case "fatal":
-		logger.SetLevel(log.FatalLevel)
-	case "panic":
-		logger.SetLevel(log.PanicLevel)
-	case "trace":
-		logger.SetLevel(log.TraceLevel)
-	case "warn":
-		logger.SetLevel(log.WarnLevel)
-	default:
-		logger.SetLevel(log.InfoLevel)
-	}
-}
+// func setLogLevel(logger *log.Logger, level string) {
+// 	switch level {
+// 	case "debug":
+// 		logger.SetLevel(slog.DebugLevel)
+// 	case "error":
+// 		logger.SetLevel(slog.ErrorLevel)
+// 	case "fatal":
+// 		logger.SetLevel(slog.FatalLevel)
+// 	case "panic":
+// 		logger.SetLevel(slog.PanicLevel)
+// 	case "trace":
+// 		logger.SetLevel(slog.TraceLevel)
+// 	case "warn":
+// 		logger.SetLevel(slog.WarnLevel)
+// 	default:
+// 		logger.SetLevel(slog.InfoLevel)
+// 	}
+// }

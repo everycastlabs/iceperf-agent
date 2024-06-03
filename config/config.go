@@ -1,8 +1,9 @@
 package config
 
 import (
+	"log/slog"
+
 	"github.com/pion/webrtc/v4"
-	"github.com/sirupsen/logrus"
 	"gopkg.in/yaml.v3"
 )
 
@@ -50,7 +51,7 @@ type Config struct {
 	// internal
 	ServiceName string `yaml:"-"`
 	NodeID      string // Do not provide, will be overwritten
-	Logger      *logrus.Entry
+	Logger      *slog.Logger
 }
 
 func NewConfig(confString string) (*Config, error) {

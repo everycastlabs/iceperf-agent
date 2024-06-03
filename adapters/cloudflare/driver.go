@@ -3,15 +3,14 @@ package cloudflare
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
-	"fmt"
 
-	"github.com/pion/stun/v2"
 	"github.com/nimbleape/iceperf-agent/config"
+	"github.com/pion/stun/v2"
 	"github.com/pion/webrtc/v4"
-	log "github.com/sirupsen/logrus"
 )
 
 type Driver struct {
@@ -20,34 +19,34 @@ type Driver struct {
 
 type CloudflareIceServers struct {
 	URLs       []string `json:"urls,omitempty"`
-	Username   string `json:"username,omitempty"`
-	Credential string `json:"credential,omitempty"`
+	Username   string   `json:"username,omitempty"`
+	Credential string   `json:"credential,omitempty"`
 }
 type CloudflareResponse struct {
-	IceServers  CloudflareIceServers `json:"iceServers"`
+	IceServers CloudflareIceServers `json:"iceServers"`
 }
 
 func (d *Driver) GetIceServers() (iceServers []webrtc.ICEServer, err error) {
-	if (d.Config.RequestUrl != "") {
+	if d.Config.RequestUrl != "" {
 
 		client := &http.Client{}
 
 		req, err := http.NewRequest("POST", d.Config.RequestUrl, strings.NewReader(`{"ttl": 86400}`))
 		req.Header.Add("Content-Type", "application/json")
-		req.Header.Add("Authorization", "Bearer " + d.Config.ApiKey)
+		req.Header.Add("Authorization", "Bearer "+d.Config.ApiKey)
 
 		if err != nil {
-			log.WithFields(log.Fields{
-				"error": err,
-			}).Error("Error forming http request")
+			// log.WithFields(log.Fields{
+			// 	"error": err,
+			// }).Error("Error forming http request")
 			return nil, err
 		}
 
 		res, err := client.Do(req)
 		if err != nil {
-			log.WithFields(log.Fields{
-				"error": err,
-			}).Error("Error doing http response")
+			// log.WithFields(log.Fields{
+			// 	"error": err,
+			// }).Error("Error doing http response")
 			return nil, err
 		}
 
@@ -55,28 +54,28 @@ func (d *Driver) GetIceServers() (iceServers []webrtc.ICEServer, err error) {
 		//check the code of the response
 		if res.StatusCode != 201 {
 			err = errors.New("error from cloudflare api")
-			log.WithFields(log.Fields{
-				"code": res.StatusCode,
-				"error": err,
-			}).Error("Error status code http response")
+			// log.WithFields(log.Fields{
+			// 	"code": res.StatusCode,
+			// 	"error": err,
+			// }).Error("Error status code http response")
 			return nil, err
 		}
 
 		responseData, err := io.ReadAll(res.Body)
 		if err != nil {
-			log.WithFields(log.Fields{
-				"error": err,
-			}).Error("Error reading http response")
+			// log.WithFields(log.Fields{
+			// 	"error": err,
+			// }).Error("Error reading http response")
 			return nil, err
 		}
-		log.Info("got a response back from cloudflare api")
+		// log.Info("got a response back from cloudflare api")
 
 		responseServers := CloudflareResponse{}
 		json.Unmarshal([]byte(responseData), &responseServers)
 
-		log.WithFields(log.Fields{
-			"response": responseServers,
-		}).Info("http response")
+		// log.WithFields(log.Fields{
+		// 	"response": responseServers,
+		// }).Info("http response")
 
 		for _, r := range responseServers.IceServers.URLs {
 
