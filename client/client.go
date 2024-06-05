@@ -2,6 +2,7 @@ package client
 
 import (
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"time"
 
@@ -28,35 +29,25 @@ var (
 	timeOffererConnected          time.Time
 )
 
-var (
-	answererTimeToReceiveCandidate = prometheus.NewGauge(prometheus.GaugeOpts{
-		Name: "answerer_time_to_receive_candidate_milliseconds",
-		Help: "Answerer received candidate, sent over to other PC",
-	})
-	offererTimeToReceiveCandidate = prometheus.NewGauge(prometheus.GaugeOpts{
-		Name: "offerer_time_to_receive_candidate_milliseconds",
-		Help: "Offerer received candidate, sent over to other PC",
-	})
-)
-
 type Client struct {
 	ConnectionPair    *ConnectionPair
 	OffererConnected  chan bool
 	AnswererConnected chan bool
 	close             chan struct{}
 	Logger            *slog.Logger
+	provider          string
 }
 
-func NewClient(config *config.Config, iceServerInfo *stun.URI) (c *Client, err error) {
-	return newClient(config, iceServerInfo)
+func NewClient(config *config.Config, iceServerInfo *stun.URI, provider string) (c *Client, err error) {
+	return newClient(config, iceServerInfo, provider)
 }
 
-func newClient(cc *config.Config, iceServerInfo *stun.URI) (*Client, error) {
+func newClient(cc *config.Config, iceServerInfo *stun.URI, provider string) (*Client, error) {
 
 	// Start timers
 	startTime = time.Now()
 
-	connectionPair, err := newConnectionPair(cc, iceServerInfo)
+	connectionPair, err := newConnectionPair(cc, iceServerInfo, provider)
 
 	if err != nil {
 		return nil, err
@@ -68,7 +59,21 @@ func newClient(cc *config.Config, iceServerInfo *stun.URI) (*Client, error) {
 		AnswererConnected: make(chan bool),
 		close:             make(chan struct{}),
 		Logger:            cc.Logger,
+		provider:          provider,
 	}
+
+	answererTimeToReceiveCandidate := prometheus.NewGauge(prometheus.GaugeOpts{
+		Name:      "answerer_time_to_receive_candidate_milliseconds",
+		Namespace: provider,
+		Subsystem: fmt.Sprintf("%s_%s_%d", iceServerInfo.Scheme.String(), iceServerInfo.Proto, iceServerInfo.Port),
+		Help:      "Answerer received candidate, sent over to other PC",
+	})
+	offererTimeToReceiveCandidate := prometheus.NewGauge(prometheus.GaugeOpts{
+		Name:      "offerer_time_to_receive_candidate_milliseconds",
+		Namespace: provider,
+		Subsystem: fmt.Sprintf("%s_%s_%d", iceServerInfo.Scheme.String(), iceServerInfo.Proto, iceServerInfo.Port),
+		Help:      "Offerer received candidate, sent over to other PC",
+	})
 
 	cc.Registry.MustRegister(answererTimeToReceiveCandidate, offererTimeToReceiveCandidate)
 

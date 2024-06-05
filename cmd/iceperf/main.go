@@ -156,7 +156,7 @@ func runService(ctx *cli.Context) error {
 	}
 
 	config.Registry = prometheus.NewRegistry()
-	pusher := push.New(config.Logging.Loki.URL, "iceperf").Gatherer(config.Registry)
+	pusher := push.New(config.Logging.Loki.URL, "grafanacloud-nimbleape-prom").Gatherer(config.Registry)
 
 	for provider, iss := range ICEServers {
 		providerLogger := logger.With("Provider", provider)
@@ -193,7 +193,7 @@ func runService(ctx *cli.Context) error {
 			}
 
 			timer := time.NewTimer(20 * time.Second)
-			c, err := client.NewClient(config, iceServerInfo)
+			c, err := client.NewClient(config, iceServerInfo, provider)
 			if err != nil {
 				return err
 			}

@@ -2,6 +2,7 @@ package client
 
 import (
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"time"
 
@@ -20,36 +21,14 @@ type ConnectionPair struct {
 	config                  *config.Config
 	sentInitialMessageViaDC time.Time
 	iceServerInfo           *stun.URI
+	provider                string
 }
 
-var (
-	answererDcBytesSentTotal = prometheus.NewGauge(prometheus.GaugeOpts{
-		Name: "answerer_DC_bytes_sent_total",
-		Help: "Answerer total bytes sent over data channel",
-	})
-	answererCpBytesSentTotal = prometheus.NewGauge(prometheus.GaugeOpts{
-		Name: "answerer_CP_bytes_sent_total",
-		Help: "Answerer total bytes sent over connection pair",
-	})
-	answererDcBytesReceivedTotal = prometheus.NewGauge(prometheus.GaugeOpts{
-		Name: "answerer_DC_bytes_received_total",
-		Help: "Answerer total bytes received over data channel",
-	})
-	answererCpBytesReceivedTotal = prometheus.NewGauge(prometheus.GaugeOpts{
-		Name: "answerer_CP_bytes_received_total",
-		Help: "Answerer total bytes received over connection pair",
-	})
-	latencyFirstPacket = prometheus.NewGauge(prometheus.GaugeOpts{
-		Name: "latency_first_packet",
-		Help: "Latency first packet",
-	})
-)
-
-func NewConnectionPair(config *config.Config, iceServerInfo *stun.URI) (c *ConnectionPair, err error) {
-	return newConnectionPair(config, iceServerInfo)
+func NewConnectionPair(config *config.Config, iceServerInfo *stun.URI, provider string) (c *ConnectionPair, err error) {
+	return newConnectionPair(config, iceServerInfo, provider)
 }
 
-func newConnectionPair(cc *config.Config, iceServerInfo *stun.URI) (*ConnectionPair, error) {
+func newConnectionPair(cc *config.Config, iceServerInfo *stun.URI, provider string) (*ConnectionPair, error) {
 
 	logOfferer := cc.Logger.With("peer", "Offerer")
 	logAnswerer := cc.Logger.With("peer", "Answerer")
@@ -59,6 +38,7 @@ func newConnectionPair(cc *config.Config, iceServerInfo *stun.URI) (*ConnectionP
 		LogOfferer:    logOfferer,
 		LogAnswerer:   logAnswerer,
 		iceServerInfo: iceServerInfo,
+		provider:      provider,
 	}
 
 	config := webrtc.Configuration{}
@@ -69,14 +49,6 @@ func newConnectionPair(cc *config.Config, iceServerInfo *stun.URI) (*ConnectionP
 
 	config.ICETransportPolicy = cc.WebRTCConfig.ICETransportPolicy
 	config.SDPSemantics = webrtc.SDPSemanticsUnifiedPlanWithFallback
-
-	cc.Registry.MustRegister(
-		answererDcBytesSentTotal,
-		answererCpBytesSentTotal,
-		answererDcBytesReceivedTotal,
-		answererCpBytesReceivedTotal,
-		latencyFirstPacket,
-	)
 
 	//we only want offerer to force turn (if we are)
 	cp.createOfferer(config)
@@ -120,6 +92,23 @@ func (cp *ConnectionPair) createOfferer(config webrtc.Configuration) {
 		Ordered:        &ordered,
 		MaxRetransmits: &maxRetransmits,
 	}
+
+	answererDcBytesSentTotal := prometheus.NewGauge(prometheus.GaugeOpts{
+		Name:      "answerer_DC_bytes_sent_total",
+		Namespace: cp.provider,
+		Subsystem: fmt.Sprintf("%s_%s_%d", cp.iceServerInfo.Scheme.String(), cp.iceServerInfo.Proto, cp.iceServerInfo.Port),
+		Help:      "Answerer total bytes sent over data channel",
+	})
+	answererCpBytesSentTotal := prometheus.NewGauge(prometheus.GaugeOpts{
+		Name:      "answerer_CP_bytes_sent_total",
+		Namespace: cp.provider,
+		Subsystem: fmt.Sprintf("%s_%s_%d", cp.iceServerInfo.Scheme.String(), cp.iceServerInfo.Proto, cp.iceServerInfo.Port),
+		Help:      "Answerer total bytes sent over connection pair",
+	})
+	cp.config.Registry.MustRegister(
+		answererDcBytesSentTotal,
+		answererCpBytesSentTotal,
+	)
 
 	sendMoreCh := make(chan struct{}, 1)
 
@@ -207,6 +196,29 @@ func (cp *ConnectionPair) createAnswerer(config webrtc.Configuration) {
 	util.Check(err)
 
 	if cp.iceServerInfo.Scheme == stun.SchemeTypeTURN || cp.iceServerInfo.Scheme == stun.SchemeTypeTURNS {
+		answererDcBytesReceivedTotal := prometheus.NewGauge(prometheus.GaugeOpts{
+			Name:      "answerer_DC_bytes_received_total",
+			Namespace: cp.provider,
+			Subsystem: fmt.Sprintf("%s_%s_%d", cp.iceServerInfo.Scheme.String(), cp.iceServerInfo.Proto, cp.iceServerInfo.Port),
+			Help:      "Answerer total bytes received over data channel",
+		})
+		answererCpBytesReceivedTotal := prometheus.NewGauge(prometheus.GaugeOpts{
+			Name:      "answerer_CP_bytes_received_total",
+			Namespace: cp.provider,
+			Subsystem: fmt.Sprintf("%s_%s_%d", cp.iceServerInfo.Scheme.String(), cp.iceServerInfo.Proto, cp.iceServerInfo.Port),
+			Help:      "Answerer total bytes received over connection pair",
+		})
+		latencyFirstPacket := prometheus.NewGauge(prometheus.GaugeOpts{
+			Name:      "latency_first_packet",
+			Namespace: cp.provider,
+			// Subsystem: fmt.Sprintf("%s_%s_%d", cp.iceServerInfo.Scheme.String(), cp.iceServerInfo.Proto, cp.iceServerInfo.Port),
+			Help: "Latency first packet",
+		})
+		cp.config.Registry.MustRegister(
+			answererDcBytesReceivedTotal,
+			answererCpBytesReceivedTotal,
+			latencyFirstPacket,
+		)
 
 		pc.OnDataChannel(func(dc *webrtc.DataChannel) {
 			var totalBytesReceived uint64
