@@ -9,6 +9,8 @@ import (
 	"github.com/nimbleape/iceperf-agent/util"
 	"github.com/pion/stun/v2"
 	"github.com/pion/webrtc/v4"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/push"
 	// log "github.com/sirupsen/logrus"
 )
 
@@ -27,12 +29,24 @@ var (
 	timeOffererConnected          time.Time
 )
 
+var (
+	answererTimeToReceiveCandidate = prometheus.NewGauge(prometheus.GaugeOpts{
+		Name: "answerer_time_to_receive_candidate_milliseconds",
+		Help: "Answerer received candidate, sent over to other PC",
+	})
+	offererTimeToReceiveCandidate = prometheus.NewGauge(prometheus.GaugeOpts{
+		Name: "offerer_time_to_receive_candidate_milliseconds",
+		Help: "Offerer received candidate, sent over to other PC",
+	})
+)
+
 type Client struct {
 	ConnectionPair    *ConnectionPair
 	OffererConnected  chan bool
 	AnswererConnected chan bool
 	close             chan struct{}
 	Logger            *slog.Logger
+	Registry          *prometheus.Registry
 }
 
 func NewClient(config *config.Config, iceServerInfo *stun.URI) (c *Client, err error) {
@@ -56,7 +70,11 @@ func newClient(cc *config.Config, iceServerInfo *stun.URI) (*Client, error) {
 		AnswererConnected: make(chan bool),
 		close:             make(chan struct{}),
 		Logger:            cc.Logger,
+		Registry:          prometheus.NewRegistry(),
 	}
+
+	c.Registry.MustRegister(answererTimeToReceiveCandidate, offererTimeToReceiveCandidate)
+	pusher := push.New("http://pushgateway:9091", "db_backup").Gatherer(c.Registry) // FIXME url and job
 
 	if cc.OnICECandidate != nil {
 		c.ConnectionPair.AnswerPC.OnICECandidate(cc.OnICECandidate)
@@ -67,6 +85,7 @@ func newClient(cc *config.Config, iceServerInfo *stun.URI) (*Client, error) {
 		c.ConnectionPair.AnswerPC.OnICECandidate(func(i *webrtc.ICECandidate) {
 			if i != nil {
 				if i.Typ == webrtc.ICECandidateTypeSrflx || i.Typ == webrtc.ICECandidateTypeRelay {
+					answererTimeToReceiveCandidate.Set(float64(time.Since(startTime).Milliseconds()))
 					timeAnswererReceivedCandidate = time.Now()
 					c.ConnectionPair.LogAnswerer.Info("Answerer received candidate, sent over to other PC", "eventTime", timeAnswererReceivedCandidate,
 						"timeSinceStartMs", time.Since(startTime).Milliseconds(),
@@ -74,6 +93,7 @@ func newClient(cc *config.Config, iceServerInfo *stun.URI) (*Client, error) {
 						"relayAddress", i.RelatedAddress,
 						"relayPort", i.RelatedPort)
 					util.Check(c.ConnectionPair.OfferPC.AddICECandidate(i.ToJSON()))
+					util.Check(pusher.Push()) // FIXME move Push() to a place that makes more sense
 				}
 			}
 		})
@@ -82,6 +102,7 @@ func newClient(cc *config.Config, iceServerInfo *stun.URI) (*Client, error) {
 		// send it to the other peer
 		c.ConnectionPair.OfferPC.OnICECandidate(func(i *webrtc.ICECandidate) {
 			if i != nil {
+				offererTimeToReceiveCandidate.Set(float64(time.Since(startTime).Milliseconds()))
 				timeOffererReceivedCandidate = time.Now()
 				c.ConnectionPair.LogOfferer.Info("Offerer received candidate, sent over to other PC", "eventTime", timeOffererReceivedCandidate,
 					"timeSinceStartMs", time.Since(startTime).Milliseconds(),
@@ -89,6 +110,7 @@ func newClient(cc *config.Config, iceServerInfo *stun.URI) (*Client, error) {
 					"relayAddress", i.RelatedAddress,
 					"relayPort", i.RelatedPort)
 				util.Check(c.ConnectionPair.AnswerPC.AddICECandidate(i.ToJSON()))
+				util.Check(pusher.Push()) // FIXME move Push() to a place that makes more sense
 			}
 		})
 	}
