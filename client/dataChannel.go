@@ -211,7 +211,7 @@ func (cp *ConnectionPair) createAnswerer(config webrtc.Configuration) {
 		pc.OnDataChannel(func(dc *webrtc.DataChannel) {
 			var totalBytesReceived uint64
 
-			hasRecievedData := false
+			hasReceivedData := false
 
 			// Register channel opening handling
 			dc.OnOpen(func() {
@@ -259,10 +259,10 @@ func (cp *ConnectionPair) createAnswerer(config webrtc.Configuration) {
 			dc.OnMessage(func(dcMsg webrtc.DataChannelMessage) {
 				cPair, _ := pc.SCTP().Transport().ICETransport().GetSelectedCandidatePair()
 
-				if !hasRecievedData {
+				if !hasReceivedData {
 					latencyFirstPacket.Set(float64(time.Since(cp.sentInitialMessageViaDC).Milliseconds()))
 					cp.LogAnswerer.Info("Received first Packet", "latencyFirstPacketInMs", time.Since(cp.sentInitialMessageViaDC).Milliseconds())
-					hasRecievedData = true
+					hasReceivedData = true
 				}
 				totalBytesReceivedTmp, _, ok := getBytesReceived(pc, dc, cPair)
 				if ok {
