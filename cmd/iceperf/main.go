@@ -156,7 +156,7 @@ func runService(ctx *cli.Context) error {
 	}
 
 	config.Registry = prometheus.NewRegistry()
-	pusher := push.New("http://pushgateway:9091", "db_backup").Gatherer(config.Registry) // FIXME url and job
+	pusher := push.New(config.Logging.Loki.URL, "iceperf").Gatherer(config.Registry)
 
 	for provider, iss := range ICEServers {
 		providerLogger := logger.With("Provider", provider)
