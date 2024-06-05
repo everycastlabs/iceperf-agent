@@ -11,9 +11,12 @@ import (
 
 	"github.com/nimbleape/iceperf-agent/client"
 	"github.com/nimbleape/iceperf-agent/config"
+	"github.com/nimbleape/iceperf-agent/util"
 	"github.com/nimbleape/iceperf-agent/version"
 	"github.com/pion/stun/v2"
 	"github.com/pion/webrtc/v4"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/push"
 	"github.com/rs/xid"
 
 	// slogloki "github.com/samber/slog-loki/v3"
@@ -152,6 +155,9 @@ func runService(ctx *cli.Context) error {
 		//this should be a fatal
 	}
 
+	config.Registry = prometheus.NewRegistry()
+	pusher := push.New("http://pushgateway:9091", "db_backup").Gatherer(config.Registry) // FIXME url and job
+
 	for provider, iss := range ICEServers {
 		providerLogger := logger.With("Provider", provider)
 
@@ -211,6 +217,9 @@ func runService(ctx *cli.Context) error {
 	// defer c.Stop()
 
 	// c.Run()
+
+	util.Check(pusher.Push())
+
 	return nil
 }
 

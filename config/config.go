@@ -4,6 +4,7 @@ import (
 	"log/slog"
 
 	"github.com/pion/webrtc/v4"
+	"github.com/prometheus/client_golang/prometheus"
 	"gopkg.in/yaml.v3"
 )
 
@@ -52,6 +53,7 @@ type Config struct {
 	ServiceName string `yaml:"-"`
 	NodeID      string // Do not provide, will be overwritten
 	Logger      *slog.Logger
+	Registry    *prometheus.Registry
 }
 
 func NewConfig(confString string) (*Config, error) {

@@ -10,7 +10,6 @@ import (
 	"github.com/pion/stun/v2"
 	"github.com/pion/webrtc/v4"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/push"
 	// log "github.com/sirupsen/logrus"
 )
 
@@ -46,7 +45,6 @@ type Client struct {
 	AnswererConnected chan bool
 	close             chan struct{}
 	Logger            *slog.Logger
-	Registry          *prometheus.Registry
 }
 
 func NewClient(config *config.Config, iceServerInfo *stun.URI) (c *Client, err error) {
@@ -70,11 +68,9 @@ func newClient(cc *config.Config, iceServerInfo *stun.URI) (*Client, error) {
 		AnswererConnected: make(chan bool),
 		close:             make(chan struct{}),
 		Logger:            cc.Logger,
-		Registry:          prometheus.NewRegistry(),
 	}
 
-	c.Registry.MustRegister(answererTimeToReceiveCandidate, offererTimeToReceiveCandidate)
-	pusher := push.New("http://pushgateway:9091", "db_backup").Gatherer(c.Registry) // FIXME url and job
+	cc.Registry.MustRegister(answererTimeToReceiveCandidate, offererTimeToReceiveCandidate)
 
 	if cc.OnICECandidate != nil {
 		c.ConnectionPair.AnswerPC.OnICECandidate(cc.OnICECandidate)
@@ -93,7 +89,6 @@ func newClient(cc *config.Config, iceServerInfo *stun.URI) (*Client, error) {
 						"relayAddress", i.RelatedAddress,
 						"relayPort", i.RelatedPort)
 					util.Check(c.ConnectionPair.OfferPC.AddICECandidate(i.ToJSON()))
-					util.Check(pusher.Push()) // FIXME move Push() to a place that makes more sense
 				}
 			}
 		})
@@ -110,7 +105,6 @@ func newClient(cc *config.Config, iceServerInfo *stun.URI) (*Client, error) {
 					"relayAddress", i.RelatedAddress,
 					"relayPort", i.RelatedPort)
 				util.Check(c.ConnectionPair.AnswerPC.AddICECandidate(i.ToJSON()))
-				util.Check(pusher.Push()) // FIXME move Push() to a place that makes more sense
 			}
 		})
 	}
