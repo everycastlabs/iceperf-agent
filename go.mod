@@ -20,8 +20,11 @@ require (
 require (
 	github.com/alecthomas/repr v0.3.0 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
+	github.com/castai/promwrite v0.5.0 // indirect
 	github.com/cespare/xxhash/v2 v2.2.0 // indirect
 	github.com/cpuguy83/go-md2man/v2 v2.0.2 // indirect
+	github.com/gogo/protobuf v1.3.2 // indirect
+	github.com/golang/snappy v0.0.4 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/hashicorp/go-multierror v1.1.1 // indirect
@@ -45,6 +48,7 @@ require (
 	github.com/prometheus/client_model v0.5.0 // indirect
 	github.com/prometheus/common v0.48.0 // indirect
 	github.com/prometheus/procfs v0.12.0 // indirect
+	github.com/prometheus/prometheus v0.40.3 // indirect
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
 	github.com/samber/lo v1.38.1 // indirect
 	github.com/xrash/smetrics v0.0.0-20201216005158-039620a65673 // indirect

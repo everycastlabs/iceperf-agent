@@ -9,6 +9,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/castai/promwrite"
 	"github.com/nimbleape/iceperf-agent/client"
 	"github.com/nimbleape/iceperf-agent/config"
 	"github.com/nimbleape/iceperf-agent/util"
@@ -157,6 +158,32 @@ func runService(ctx *cli.Context) error {
 
 	config.Registry = prometheus.NewRegistry()
 	pusher := push.New(config.Logging.Loki.URL, "grafanacloud-nimbleape-prom").Gatherer(config.Registry)
+	promClient := promwrite.NewClient(config.Logging.Prometheus.URL)
+
+	// TEST writing to qryn
+	if _, err := promClient.Write(
+		ctx.Context,
+		&promwrite.WriteRequest{
+			TimeSeries: []promwrite.TimeSeries{
+				{
+					Labels: []promwrite.Label{
+						{
+							Name:  "__name__",
+							Value: "test_metric",
+						},
+					},
+					Sample: promwrite.Sample{
+						Time:  time.Now(),
+						Value: 123,
+					},
+				},
+			},
+		},
+		promwrite.WriteHeaders(config.Logging.Prometheus.AuthHeaders),
+	); err != nil {
+		logger.Error("Error writing to Qryn", err)
+	}
+	// end TEST
 
 	for provider, iss := range ICEServers {
 		providerLogger := logger.With("Provider", provider)

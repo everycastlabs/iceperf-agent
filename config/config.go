@@ -35,9 +35,16 @@ type LokiConfig struct {
 	AuthHeaders    map[string]string `yaml:"auth_headers,omitempty"`
 }
 
+type PromConfig struct {
+	Enabled     bool              `yaml:"enabled"`
+	URL         string            `yaml:"url"`
+	AuthHeaders map[string]string `yaml:"auth_headers,omitempty"`
+}
+
 type LoggingConfig struct {
-	Level string     `yaml:"level"`
-	Loki  LokiConfig `yaml:"loki"`
+	Level      string     `yaml:"level"`
+	Loki       LokiConfig `yaml:"loki"`
+	Prometheus PromConfig `yaml:"prometheus"`
 }
 
 type Config struct {

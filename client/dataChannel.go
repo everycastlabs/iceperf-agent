@@ -214,11 +214,12 @@ func (cp *ConnectionPair) createAnswerer(config webrtc.Configuration) {
 			// Subsystem: fmt.Sprintf("%s_%s_%d", cp.iceServerInfo.Scheme.String(), cp.iceServerInfo.Proto, cp.iceServerInfo.Port),
 			Help: "Latency first packet",
 		})
-		cp.config.Registry.MustRegister(
-			answererDcBytesReceivedTotal,
-			answererCpBytesReceivedTotal,
-			latencyFirstPacket,
-		)
+		// FIXME or remove
+		// cp.config.Registry.MustRegister(
+		// 	answererDcBytesReceivedTotal,
+		// 	answererCpBytesReceivedTotal,
+		// 	latencyFirstPacket,
+		// )
 
 		pc.OnDataChannel(func(dc *webrtc.DataChannel) {
 			var totalBytesReceived uint64
