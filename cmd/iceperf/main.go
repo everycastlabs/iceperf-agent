@@ -12,12 +12,13 @@ import (
 	"github.com/castai/promwrite"
 	"github.com/nimbleape/iceperf-agent/client"
 	"github.com/nimbleape/iceperf-agent/config"
-	"github.com/nimbleape/iceperf-agent/util"
 	"github.com/nimbleape/iceperf-agent/version"
 	"github.com/pion/stun/v2"
 	"github.com/pion/webrtc/v4"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/push"
+
+	// "github.com/prometheus/client_golang/prometheus/push"
+
 	"github.com/rs/xid"
 
 	// slogloki "github.com/samber/slog-loki/v3"
@@ -157,32 +158,34 @@ func runService(ctx *cli.Context) error {
 	}
 
 	config.Registry = prometheus.NewRegistry()
-	pusher := push.New(config.Logging.Loki.URL, "grafanacloud-nimbleape-prom").Gatherer(config.Registry)
+	// pusher := push.New(config.Logging.Loki.URL, "grafanacloud-nimbleape-prom").Gatherer(config.Registry)
+	// pusher := push.New()
+	// pusher.Gatherer(config.Registry)
 	promClient := promwrite.NewClient(config.Logging.Prometheus.URL)
 
 	// TEST writing to qryn
-	if _, err := promClient.Write(
-		ctx.Context,
-		&promwrite.WriteRequest{
-			TimeSeries: []promwrite.TimeSeries{
-				{
-					Labels: []promwrite.Label{
-						{
-							Name:  "__name__",
-							Value: "test_metric",
-						},
-					},
-					Sample: promwrite.Sample{
-						Time:  time.Now(),
-						Value: 123,
-					},
-				},
-			},
-		},
-		promwrite.WriteHeaders(config.Logging.Prometheus.AuthHeaders),
-	); err != nil {
-		logger.Error("Error writing to Qryn", err)
-	}
+	// if _, err := promClient.Write(
+	// 	ctx.Context,
+	// 	&promwrite.WriteRequest{
+	// 		TimeSeries: []promwrite.TimeSeries{
+	// 			{
+	// 				Labels: []promwrite.Label{
+	// 					{
+	// 						Name:  "__name__",
+	// 						Value: "test_metric",
+	// 					},
+	// 				},
+	// 				Sample: promwrite.Sample{
+	// 					Time:  time.Now(),
+	// 					Value: 123,
+	// 				},
+	// 			},
+	// 		},
+	// 	},
+	// 	promwrite.WriteHeaders(config.Logging.Prometheus.AuthHeaders),
+	// ); err != nil {
+	// 	logger.Error("Error writing to Qryn", err)
+	// }
 	// end TEST
 
 	for provider, iss := range ICEServers {
@@ -245,7 +248,50 @@ func runService(ctx *cli.Context) error {
 
 	// c.Run()
 
-	util.Check(pusher.Push())
+	// util.Check(pusher.Push(config.Logging.Prometheus.URL))
+
+	// write all metrics to qryn at once
+	mf, err := config.Registry.Gather()
+	if err != nil {
+		logger.Error("Error gathering metrics from registry", err)
+	}
+
+	if len(mf) > 0 {
+		ts := []promwrite.TimeSeries{}
+		for _, m := range mf {
+			ts = append(ts, promwrite.TimeSeries{
+				Labels: []promwrite.Label{
+					{
+						Name:  "__name__",
+						Value: m.GetName(),
+					},
+					{
+						Name:  "description",
+						Value: m.GetHelp(),
+					},
+					{
+						Name:  "type",
+						Value: m.GetType().String(),
+					},
+				},
+				Sample: promwrite.Sample{
+					Time:  time.Now(),
+					Value: m.GetMetric()[0].GetUntyped().GetValue(),
+				},
+			})
+			// logger.Info("got metrics", "name", m.GetName(), "type", m.GetType(), "value", m.GetMetric(), "unit", m.GetUnit(), "description", m.GetHelp())
+		}
+		_, err := promClient.Write(
+			ctx.Context,
+			&promwrite.WriteRequest{
+				TimeSeries: ts,
+			},
+			promwrite.WriteHeaders(config.Logging.Prometheus.AuthHeaders),
+		)
+		if err != nil {
+			logger.Error("Error writing to Qryn", err)
+		}
+	}
 
 	return nil
 }
