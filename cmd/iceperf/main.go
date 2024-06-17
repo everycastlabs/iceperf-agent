@@ -259,6 +259,14 @@ func runService(ctx *cli.Context) error {
 	if len(mf) > 0 {
 		ts := []promwrite.TimeSeries{}
 		for _, m := range mf {
+
+			var v float64
+			switch m.GetType().String() {
+			case "GAUGE":
+				v = *m.GetMetric()[0].Gauge.Value
+				//add more
+			}
+
 			ts = append(ts, promwrite.TimeSeries{
 				Labels: []promwrite.Label{
 					{
@@ -276,10 +284,10 @@ func runService(ctx *cli.Context) error {
 				},
 				Sample: promwrite.Sample{
 					Time:  time.Now(),
-					Value: m.GetMetric()[0].GetUntyped().GetValue(),
+					Value: v,
 				},
 			})
-			// logger.Info("got metrics", "name", m.GetName(), "type", m.GetType(), "value", m.GetMetric(), "unit", m.GetUnit(), "description", m.GetHelp())
+			logger.Info("got metrics", "name", m.GetName(), "type", m.GetType(), "value", m.GetMetric(), "unit", m.GetUnit(), "description", m.GetHelp())
 		}
 		_, err := promClient.Write(
 			ctx.Context,
@@ -291,6 +299,8 @@ func runService(ctx *cli.Context) error {
 		if err != nil {
 			logger.Error("Error writing to Qryn", err)
 		}
+		logger.Info("Wrote stats to prom")
+
 	}
 
 	return nil

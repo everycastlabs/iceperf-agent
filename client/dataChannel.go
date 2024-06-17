@@ -15,6 +15,7 @@ import (
 
 type ConnectionPair struct {
 	OfferPC                 *webrtc.PeerConnection
+	OfferDC                 *webrtc.DataChannel
 	AnswerPC                *webrtc.PeerConnection
 	LogOfferer              *slog.Logger
 	LogAnswerer             *slog.Logger
@@ -93,21 +94,21 @@ func (cp *ConnectionPair) createOfferer(config webrtc.Configuration) {
 		MaxRetransmits: &maxRetransmits,
 	}
 
-	answererDcBytesSentTotal := prometheus.NewGauge(prometheus.GaugeOpts{
-		Name:      "answerer_DC_bytes_sent_total",
+	offererDcBytesSentTotal := prometheus.NewGauge(prometheus.GaugeOpts{
+		Name:      "offerer_DC_bytes_sent_total",
 		Namespace: cp.provider,
 		Subsystem: fmt.Sprintf("%s_%s_%d", cp.iceServerInfo.Scheme.String(), cp.iceServerInfo.Proto, cp.iceServerInfo.Port),
-		Help:      "Answerer total bytes sent over data channel",
+		Help:      "Offerer total bytes sent over data channel",
 	})
-	answererCpBytesSentTotal := prometheus.NewGauge(prometheus.GaugeOpts{
-		Name:      "answerer_CP_bytes_sent_total",
+	offererCpBytesSentTotal := prometheus.NewGauge(prometheus.GaugeOpts{
+		Name:      "offerer_CP_bytes_sent_total",
 		Namespace: cp.provider,
 		Subsystem: fmt.Sprintf("%s_%s_%d", cp.iceServerInfo.Scheme.String(), cp.iceServerInfo.Proto, cp.iceServerInfo.Port),
-		Help:      "Answerer total bytes sent over connection pair",
+		Help:      "Offerer total bytes sent over connection pair",
 	})
 	cp.config.Registry.MustRegister(
-		answererDcBytesSentTotal,
-		answererCpBytesSentTotal,
+		offererDcBytesSentTotal,
+		offererCpBytesSentTotal,
 	)
 
 	sendMoreCh := make(chan struct{}, 1)
@@ -116,34 +117,22 @@ func (cp *ConnectionPair) createOfferer(config webrtc.Configuration) {
 	dc, err := pc.CreateDataChannel("data", options)
 	util.Check(err)
 
+	cp.OfferDC = dc
+
 	if cp.iceServerInfo.Scheme == stun.SchemeTypeTURN || cp.iceServerInfo.Scheme == stun.SchemeTypeTURNS {
 
 		// Register channel opening handling
 		dc.OnOpen(func() {
 
-			cPair, err := pc.SCTP().Transport().ICETransport().GetSelectedCandidatePair()
-
-			if err != nil {
-				// do something
-			}
-
 			stats := pc.GetStats()
-			for k, v := range stats {
-				cp.LogOfferer.Info("Offerer Stats", "statsKey", k,
-					"statsValue", v)
-			}
-
-			cpPairStats, ok := stats.GetICECandidatePairStats(cPair)
-
-			if !ok {
-				//do something
-				cp.LogOfferer.Error("Error getting ICE CandidatePair Stats")
-			}
+			iceTransportStats := stats["iceTransport"].(webrtc.TransportStats)
+			// for k, v := range stats {
+			cp.LogOfferer.Info("Offerer Stats", "iceTransportStats", iceTransportStats.BytesReceived)
+			//}
 
 			cp.LogOfferer.Info("OnOpen: Start sending a series of 1024-byte packets as fast as it can", "dataChannelLabel", dc.Label(),
 				"dataChannelId", dc.ID(),
-				"candidatePair", cPair.String(),
-				"candidatePairStats", cpPairStats)
+			)
 
 			for {
 				if !hasSentData {
@@ -151,7 +140,9 @@ func (cp *ConnectionPair) createOfferer(config webrtc.Configuration) {
 					hasSentData = true
 				}
 				err2 := dc.Send(buf)
-				util.Check(err2)
+				if err2 != nil {
+					break
+				}
 
 				if dc.BufferedAmount() > maxBufferedAmount {
 					// Wait until the bufferedAmount becomes lower than the threshold
@@ -176,14 +167,12 @@ func (cp *ConnectionPair) createOfferer(config webrtc.Configuration) {
 
 		dc.OnClose(func() {
 
-			cPair, _ := pc.SCTP().Transport().ICETransport().GetSelectedCandidatePair()
+			dcBytesSentTotal, cpSentBytesTotal, _ := getBytesSent(pc, dc)
 
-			dcBytesSentTotal, cpSentBytesTotal, _ := getBytesSent(pc, dc, cPair)
+			offererDcBytesSentTotal.Set(float64(dcBytesSentTotal))
+			offererCpBytesSentTotal.Set(float64(cpSentBytesTotal))
 
-			answererDcBytesSentTotal.Set(float64(dcBytesSentTotal))
-			answererCpBytesSentTotal.Set(float64(cpSentBytesTotal))
-
-			cp.LogAnswerer.Info("Sent total", "dcSentBytesTotal", dcBytesSentTotal,
+			cp.LogOfferer.Info("Sent total", "dcSentBytesTotal", dcBytesSentTotal,
 				"cpSentBytesTotal", cpSentBytesTotal)
 		})
 	}
@@ -211,8 +200,8 @@ func (cp *ConnectionPair) createAnswerer(config webrtc.Configuration) {
 		latencyFirstPacket := prometheus.NewGauge(prometheus.GaugeOpts{
 			Name:      "latency_first_packet",
 			Namespace: cp.provider,
-			// Subsystem: fmt.Sprintf("%s_%s_%d", cp.iceServerInfo.Scheme.String(), cp.iceServerInfo.Proto, cp.iceServerInfo.Port),
-			Help: "Latency first packet",
+			Subsystem: fmt.Sprintf("%s_%s_%d", cp.iceServerInfo.Scheme.String(), cp.iceServerInfo.Proto, cp.iceServerInfo.Port),
+			Help:      "Latency first packet",
 		})
 		// FIXME or remove
 		// cp.config.Registry.MustRegister(
@@ -229,24 +218,8 @@ func (cp *ConnectionPair) createAnswerer(config webrtc.Configuration) {
 			// Register channel opening handling
 			dc.OnOpen(func() {
 
-				cPair, err := pc.SCTP().Transport().ICETransport().GetSelectedCandidatePair()
-
-				if err != nil {
-					//do something
-				}
-
-				stats := pc.GetStats()
-				cpPairStats, ok := stats.GetICECandidatePairStats(cPair)
-
-				if !ok {
-					//do something
-					cp.LogAnswerer.Error("Error getting ICE CandidatePair Stats")
-				}
-
 				cp.LogAnswerer.Info("OnOpen: Start receiving data", "dataChannelLabel", dc.Label(),
-					"dataChannelId", dc.ID(),
-					"candidatePair", cPair.String(),
-					"candidatePairStats", cpPairStats)
+					"dataChannelId", dc.ID())
 
 				since := time.Now()
 
@@ -270,14 +243,13 @@ func (cp *ConnectionPair) createAnswerer(config webrtc.Configuration) {
 
 			// Register the OnMessage to handle incoming messages
 			dc.OnMessage(func(dcMsg webrtc.DataChannelMessage) {
-				cPair, _ := pc.SCTP().Transport().ICETransport().GetSelectedCandidatePair()
 
 				if !hasReceivedData {
 					latencyFirstPacket.Set(float64(time.Since(cp.sentInitialMessageViaDC).Milliseconds()))
 					cp.LogAnswerer.Info("Received first Packet", "latencyFirstPacketInMs", time.Since(cp.sentInitialMessageViaDC).Milliseconds())
 					hasReceivedData = true
 				}
-				totalBytesReceivedTmp, _, ok := getBytesReceived(pc, dc, cPair)
+				totalBytesReceivedTmp, _, ok := getBytesReceived(pc, dc)
 				if ok {
 					totalBytesReceived = totalBytesReceivedTmp
 					// cp.LogAnswerer.Info("Received Bytes So Far", "dcReceivedBytes", totalBytesReceivedTmp,
@@ -286,9 +258,8 @@ func (cp *ConnectionPair) createAnswerer(config webrtc.Configuration) {
 			})
 
 			dc.OnClose(func() {
-				cPair, _ := pc.SCTP().Transport().ICETransport().GetSelectedCandidatePair()
 
-				dcBytesReceivedTotal, cpBytesReceivedTotal, _ := getBytesReceived(pc, dc, cPair)
+				dcBytesReceivedTotal, cpBytesReceivedTotal, _ := getBytesReceived(pc, dc)
 
 				answererDcBytesReceivedTotal.Set(float64(dcBytesReceivedTotal))
 				answererCpBytesReceivedTotal.Set(float64(cpBytesReceivedTotal))
@@ -302,7 +273,7 @@ func (cp *ConnectionPair) createAnswerer(config webrtc.Configuration) {
 	cp.AnswerPC = pc
 }
 
-func getBytesReceived(pc *webrtc.PeerConnection, dc *webrtc.DataChannel, cp *webrtc.ICECandidatePair) (uint64, uint64, bool) {
+func getBytesReceived(pc *webrtc.PeerConnection, dc *webrtc.DataChannel) (uint64, uint64, bool) {
 	stats := pc.GetStats()
 
 	dcStats, ok := stats.GetDataChannelStats(dc)
@@ -310,15 +281,11 @@ func getBytesReceived(pc *webrtc.PeerConnection, dc *webrtc.DataChannel, cp *web
 		return 0, 0, ok
 	}
 
-	// cpPairStats, ok := stats.GetICECandidatePairStats(cp)
-	// if !ok {
-	// 	return 0, 0, ok
-	// }
-
-	return dcStats.BytesReceived, 0, ok
+	iceTransportStats := stats["iceTransport"].(webrtc.TransportStats)
+	return dcStats.BytesReceived, iceTransportStats.BytesReceived, ok
 }
 
-func getBytesSent(pc *webrtc.PeerConnection, dc *webrtc.DataChannel, cp *webrtc.ICECandidatePair) (uint64, uint64, bool) {
+func getBytesSent(pc *webrtc.PeerConnection, dc *webrtc.DataChannel) (uint64, uint64, bool) {
 	stats := pc.GetStats()
 
 	dcStats, ok := stats.GetDataChannelStats(dc)
@@ -326,10 +293,6 @@ func getBytesSent(pc *webrtc.PeerConnection, dc *webrtc.DataChannel, cp *webrtc.
 		return 0, 0, ok
 	}
 
-	// cpPairStats, ok := stats.GetICECandidatePairStats(cp)
-	// if !ok {
-	// 	return 0, 0, ok
-	// }
-
-	return dcStats.BytesSent, 0, ok
+	iceTransportStats := stats["iceTransport"].(webrtc.TransportStats)
+	return dcStats.BytesSent, iceTransportStats.BytesSent, ok
 }

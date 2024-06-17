@@ -218,11 +218,19 @@ func (c *Client) run() {
 
 	// this is blocking
 	c.close <- struct{}{}
+
 	util.Check(c.Stop())
 }
 
 func (c *Client) Stop() error {
 	c.Logger.Info("Stopping client...")
+
+	if c.ConnectionPair.OfferDC != nil {
+		c.ConnectionPair.OfferDC.Close()
+	}
+
+	time.Sleep(1 * time.Second)
+
 	if err := c.ConnectionPair.OfferPC.Close(); err != nil {
 		c.Logger.Error("cannot close c.ConnectionPair.OfferPC", "error", err)
 		return err
