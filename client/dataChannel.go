@@ -211,15 +211,14 @@ func (cp *ConnectionPair) createAnswerer(config webrtc.Configuration) {
 		latencyFirstPacket := prometheus.NewGauge(prometheus.GaugeOpts{
 			Name:      "latency_first_packet",
 			Namespace: cp.provider,
-			// Subsystem: fmt.Sprintf("%s_%s_%d", cp.iceServerInfo.Scheme.String(), cp.iceServerInfo.Proto, cp.iceServerInfo.Port),
-			Help: "Latency first packet",
+			Subsystem: fmt.Sprintf("%s_%s_%d", cp.iceServerInfo.Scheme.String(), cp.iceServerInfo.Proto, cp.iceServerInfo.Port),
+			Help:      "Latency first packet",
 		})
-		// FIXME or remove
-		// cp.config.Registry.MustRegister(
-		// 	answererDcBytesReceivedTotal,
-		// 	answererCpBytesReceivedTotal,
-		// 	latencyFirstPacket,
-		// )
+		cp.config.Registry.MustRegister(
+			answererDcBytesReceivedTotal,
+			answererCpBytesReceivedTotal,
+			latencyFirstPacket,
+		)
 
 		pc.OnDataChannel(func(dc *webrtc.DataChannel) {
 			var totalBytesReceived uint64

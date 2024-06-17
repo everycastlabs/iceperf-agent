@@ -17,8 +17,6 @@ import (
 	"github.com/pion/webrtc/v4"
 	"github.com/prometheus/client_golang/prometheus"
 
-	// "github.com/prometheus/client_golang/prometheus/push"
-
 	"github.com/rs/xid"
 
 	// slogloki "github.com/samber/slog-loki/v3"
@@ -149,7 +147,6 @@ func runService(ctx *cli.Context) error {
 
 	logger := logg.With("testRunId", testRunId)
 
-	// TODO we will make a new client for each ICE Server URL from each provider
 	// get ICE servers and loop them
 	ICEServers, err := client.GetIceServers(config)
 	if err != nil {
@@ -158,35 +155,7 @@ func runService(ctx *cli.Context) error {
 	}
 
 	config.Registry = prometheus.NewRegistry()
-	// pusher := push.New(config.Logging.Loki.URL, "grafanacloud-nimbleape-prom").Gatherer(config.Registry)
-	// pusher := push.New()
-	// pusher.Gatherer(config.Registry)
 	promClient := promwrite.NewClient(config.Logging.Prometheus.URL)
-
-	// TEST writing to qryn
-	// if _, err := promClient.Write(
-	// 	ctx.Context,
-	// 	&promwrite.WriteRequest{
-	// 		TimeSeries: []promwrite.TimeSeries{
-	// 			{
-	// 				Labels: []promwrite.Label{
-	// 					{
-	// 						Name:  "__name__",
-	// 						Value: "test_metric",
-	// 					},
-	// 				},
-	// 				Sample: promwrite.Sample{
-	// 					Time:  time.Now(),
-	// 					Value: 123,
-	// 				},
-	// 			},
-	// 		},
-	// 	},
-	// 	promwrite.WriteHeaders(config.Logging.Prometheus.AuthHeaders),
-	// ); err != nil {
-	// 	logger.Error("Error writing to Qryn", err)
-	// }
-	// end TEST
 
 	for provider, iss := range ICEServers {
 		providerLogger := logger.With("Provider", provider)
@@ -240,16 +209,6 @@ func runService(ctx *cli.Context) error {
 		providerLogger.Info("Provider Finished")
 	}
 
-	// c, err := client.NewClient(config)
-	// if err != nil {
-	// 	return nil
-	// }
-	// defer c.Stop()
-
-	// c.Run()
-
-	// util.Check(pusher.Push(config.Logging.Prometheus.URL))
-
 	// write all metrics to qryn at once
 	mf, err := config.Registry.Gather()
 	if err != nil {
@@ -279,7 +238,6 @@ func runService(ctx *cli.Context) error {
 					Value: m.GetMetric()[0].GetUntyped().GetValue(),
 				},
 			})
-			// logger.Info("got metrics", "name", m.GetName(), "type", m.GetType(), "value", m.GetMetric(), "unit", m.GetUnit(), "description", m.GetHelp())
 		}
 		_, err := promClient.Write(
 			ctx.Context,
