@@ -267,26 +267,33 @@ func runService(ctx *cli.Context) error {
 				//add more
 			}
 
-			ts = append(ts, promwrite.TimeSeries{
-				Labels: []promwrite.Label{
-					{
-						Name:  "__name__",
-						Value: m.GetName(),
-					},
-					{
-						Name:  "description",
-						Value: m.GetHelp(),
-					},
-					{
-						Name:  "type",
-						Value: m.GetType().String(),
-					},
+			labels := []promwrite.Label{
+				{
+					Name:  "__name__",
+					Value: m.GetName(),
 				},
+				{
+					Name:  "description",
+					Value: m.GetHelp(),
+				},
+				{
+					Name:  "type",
+					Value: m.GetType().String(),
+				},
+			}
+
+			for _, lp := range m.GetMetric()[0].GetLabel() {
+				labels = append(labels, promwrite.Label{Name: *lp.Name, Value: *lp.Value})
+			}
+
+			ts = append(ts, promwrite.TimeSeries{
+				Labels: labels,
 				Sample: promwrite.Sample{
 					Time:  time.Now(),
 					Value: v,
 				},
 			})
+
 			logger.Info("got metrics", "name", m.GetName(), "type", m.GetType(), "value", m.GetMetric(), "unit", m.GetUnit(), "description", m.GetHelp())
 		}
 		_, err := promClient.Write(

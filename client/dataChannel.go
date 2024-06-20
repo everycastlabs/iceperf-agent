@@ -94,23 +94,6 @@ func (cp *ConnectionPair) createOfferer(config webrtc.Configuration) {
 		MaxRetransmits: &maxRetransmits,
 	}
 
-	offererDcBytesSentTotal := prometheus.NewGauge(prometheus.GaugeOpts{
-		Name:      "offerer_DC_bytes_sent_total",
-		Namespace: cp.provider,
-		Subsystem: fmt.Sprintf("%s_%s_%d", cp.iceServerInfo.Scheme.String(), cp.iceServerInfo.Proto, cp.iceServerInfo.Port),
-		Help:      "Offerer total bytes sent over data channel",
-	})
-	offererCpBytesSentTotal := prometheus.NewGauge(prometheus.GaugeOpts{
-		Name:      "offerer_CP_bytes_sent_total",
-		Namespace: cp.provider,
-		Subsystem: fmt.Sprintf("%s_%s_%d", cp.iceServerInfo.Scheme.String(), cp.iceServerInfo.Proto, cp.iceServerInfo.Port),
-		Help:      "Offerer total bytes sent over connection pair",
-	})
-	cp.config.Registry.MustRegister(
-		offererDcBytesSentTotal,
-		offererCpBytesSentTotal,
-	)
-
 	sendMoreCh := make(chan struct{}, 1)
 
 	// Create a datachannel with label 'data'
@@ -120,6 +103,30 @@ func (cp *ConnectionPair) createOfferer(config webrtc.Configuration) {
 	cp.OfferDC = dc
 
 	if cp.iceServerInfo.Scheme == stun.SchemeTypeTURN || cp.iceServerInfo.Scheme == stun.SchemeTypeTURNS {
+
+		labels := map[string]string{
+			"provider": cp.provider,
+			"scheme":   cp.iceServerInfo.Scheme.String(),
+			"protocol": cp.iceServerInfo.Proto.String(),
+			"port":     fmt.Sprintf("%d", cp.iceServerInfo.Port),
+		}
+
+		offererDcBytesSentTotal := prometheus.NewGauge(prometheus.GaugeOpts{
+			Name:        "offerer_DC_bytes_sent_total",
+			Namespace:   "iceperf",
+			Help:        "Offerer total bytes sent over data channel",
+			ConstLabels: labels,
+		})
+		offererCpBytesSentTotal := prometheus.NewGauge(prometheus.GaugeOpts{
+			Name:        "offerer_CP_bytes_sent_total",
+			Namespace:   "iceperf",
+			Help:        "Offerer total bytes sent over connection pair",
+			ConstLabels: labels,
+		})
+		cp.config.Registry.MustRegister(
+			offererDcBytesSentTotal,
+			offererCpBytesSentTotal,
+		)
 
 		// Register channel opening handling
 		dc.OnOpen(func() {
@@ -185,30 +192,37 @@ func (cp *ConnectionPair) createAnswerer(config webrtc.Configuration) {
 	util.Check(err)
 
 	if cp.iceServerInfo.Scheme == stun.SchemeTypeTURN || cp.iceServerInfo.Scheme == stun.SchemeTypeTURNS {
+
+		labels := map[string]string{
+			"provider": cp.provider,
+			"scheme":   cp.iceServerInfo.Scheme.String(),
+			"protocol": cp.iceServerInfo.Proto.String(),
+			"port":     fmt.Sprintf("%d", cp.iceServerInfo.Port),
+		}
+
 		answererDcBytesReceivedTotal := prometheus.NewGauge(prometheus.GaugeOpts{
-			Name:      "answerer_DC_bytes_received_total",
-			Namespace: cp.provider,
-			Subsystem: fmt.Sprintf("%s_%s_%d", cp.iceServerInfo.Scheme.String(), cp.iceServerInfo.Proto, cp.iceServerInfo.Port),
-			Help:      "Answerer total bytes received over data channel",
+			Name:        "answerer_DC_bytes_received_total",
+			Namespace:   "iceperf",
+			Help:        "Answerer total bytes received over data channel",
+			ConstLabels: labels,
 		})
 		answererCpBytesReceivedTotal := prometheus.NewGauge(prometheus.GaugeOpts{
-			Name:      "answerer_CP_bytes_received_total",
-			Namespace: cp.provider,
-			Subsystem: fmt.Sprintf("%s_%s_%d", cp.iceServerInfo.Scheme.String(), cp.iceServerInfo.Proto, cp.iceServerInfo.Port),
-			Help:      "Answerer total bytes received over connection pair",
+			Name:        "answerer_CP_bytes_received_total",
+			Namespace:   "iceperf",
+			Help:        "Answerer total bytes received over connection pair",
+			ConstLabels: labels,
 		})
 		latencyFirstPacket := prometheus.NewGauge(prometheus.GaugeOpts{
-			Name:      "latency_first_packet",
-			Namespace: cp.provider,
-			Subsystem: fmt.Sprintf("%s_%s_%d", cp.iceServerInfo.Scheme.String(), cp.iceServerInfo.Proto, cp.iceServerInfo.Port),
-			Help:      "Latency first packet",
+			Name:        "latency_first_packet",
+			Namespace:   "iceperf",
+			Help:        "Latency first packet",
+			ConstLabels: labels,
 		})
-		// FIXME or remove
-		// cp.config.Registry.MustRegister(
-		// 	answererDcBytesReceivedTotal,
-		// 	answererCpBytesReceivedTotal,
-		// 	latencyFirstPacket,
-		// )
+		cp.config.Registry.MustRegister(
+			answererDcBytesReceivedTotal,
+			answererCpBytesReceivedTotal,
+			latencyFirstPacket,
+		)
 
 		pc.OnDataChannel(func(dc *webrtc.DataChannel) {
 			var totalBytesReceived uint64

@@ -62,17 +62,24 @@ func newClient(cc *config.Config, iceServerInfo *stun.URI, provider string) (*Cl
 		provider:          provider,
 	}
 
+	labels := map[string]string{
+		"provider": provider,
+		"scheme":   iceServerInfo.Scheme.String(),
+		"protocol": iceServerInfo.Proto.String(),
+		"port":     fmt.Sprintf("%d", iceServerInfo.Port),
+	}
+
 	answererTimeToReceiveCandidate := prometheus.NewGauge(prometheus.GaugeOpts{
-		Name:      "answerer_time_to_receive_candidate_milliseconds",
-		Namespace: provider,
-		Subsystem: fmt.Sprintf("%s_%s_%d", iceServerInfo.Scheme.String(), iceServerInfo.Proto, iceServerInfo.Port),
-		Help:      "Answerer received candidate, sent over to other PC",
+		Name:        "answerer_time_to_receive_candidate_milliseconds",
+		Namespace:   "iceperf",
+		Help:        "Answerer received candidate, sent over to other PC",
+		ConstLabels: labels,
 	})
 	offererTimeToReceiveCandidate := prometheus.NewGauge(prometheus.GaugeOpts{
-		Name:      "offerer_time_to_receive_candidate_milliseconds",
-		Namespace: provider,
-		Subsystem: fmt.Sprintf("%s_%s_%d", iceServerInfo.Scheme.String(), iceServerInfo.Proto, iceServerInfo.Port),
-		Help:      "Offerer received candidate, sent over to other PC",
+		Name:        "offerer_time_to_receive_candidate_milliseconds",
+		Namespace:   "iceperf",
+		Help:        "Offerer received candidate, sent over to other PC",
+		ConstLabels: labels,
 	})
 
 	cc.Registry.MustRegister(answererTimeToReceiveCandidate, offererTimeToReceiveCandidate)
