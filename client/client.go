@@ -1,16 +1,20 @@
 package client
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"time"
 
 	"github.com/nimbleape/iceperf-agent/config"
+	"github.com/nimbleape/iceperf-agent/stats"
 	"github.com/nimbleape/iceperf-agent/util"
 	"github.com/pion/stun/v2"
 	"github.com/pion/webrtc/v4"
-	"github.com/prometheus/client_golang/prometheus"
+	"github.com/rs/xid"
+	// "github.com/prometheus/client_golang/prometheus"
 	// log "github.com/sirupsen/logrus"
 )
 
@@ -36,18 +40,27 @@ type Client struct {
 	close             chan struct{}
 	Logger            *slog.Logger
 	provider          string
+	stats             *stats.Stats
+	config            *config.Config
 }
 
-func NewClient(config *config.Config, iceServerInfo *stun.URI, provider string) (c *Client, err error) {
-	return newClient(config, iceServerInfo, provider)
+func NewClient(config *config.Config, iceServerInfo *stun.URI, provider string, testRunId xid.ID) (c *Client, err error) {
+	return newClient(config, iceServerInfo, provider, testRunId)
 }
 
-func newClient(cc *config.Config, iceServerInfo *stun.URI, provider string) (*Client, error) {
+func newClient(cc *config.Config, iceServerInfo *stun.URI, provider string, testRunId xid.ID) (*Client, error) {
 
 	// Start timers
 	startTime = time.Now()
 
-	connectionPair, err := newConnectionPair(cc, iceServerInfo, provider)
+	stats := stats.NewStats(testRunId.String(), map[string]string{
+		"provider": provider,
+		"scheme":   iceServerInfo.Scheme.String(),
+		"protocol": iceServerInfo.Proto.String(),
+		"port":     fmt.Sprintf("%d", iceServerInfo.Port),
+	})
+
+	connectionPair, err := newConnectionPair(cc, iceServerInfo, provider, stats)
 
 	if err != nil {
 		return nil, err
@@ -60,29 +73,9 @@ func newClient(cc *config.Config, iceServerInfo *stun.URI, provider string) (*Cl
 		close:             make(chan struct{}),
 		Logger:            cc.Logger,
 		provider:          provider,
+		stats:             stats,
+		config:            cc,
 	}
-
-	labels := map[string]string{
-		"provider": provider,
-		"scheme":   iceServerInfo.Scheme.String(),
-		"protocol": iceServerInfo.Proto.String(),
-		"port":     fmt.Sprintf("%d", iceServerInfo.Port),
-	}
-
-	answererTimeToReceiveCandidate := prometheus.NewGauge(prometheus.GaugeOpts{
-		Name:        "answerer_time_to_receive_candidate_milliseconds",
-		Namespace:   "iceperf",
-		Help:        "Answerer received candidate, sent over to other PC",
-		ConstLabels: labels,
-	})
-	offererTimeToReceiveCandidate := prometheus.NewGauge(prometheus.GaugeOpts{
-		Name:        "offerer_time_to_receive_candidate_milliseconds",
-		Namespace:   "iceperf",
-		Help:        "Offerer received candidate, sent over to other PC",
-		ConstLabels: labels,
-	})
-
-	cc.Registry.MustRegister(answererTimeToReceiveCandidate, offererTimeToReceiveCandidate)
 
 	if cc.OnICECandidate != nil {
 		c.ConnectionPair.AnswerPC.OnICECandidate(cc.OnICECandidate)
@@ -93,7 +86,7 @@ func newClient(cc *config.Config, iceServerInfo *stun.URI, provider string) (*Cl
 		c.ConnectionPair.AnswerPC.OnICECandidate(func(i *webrtc.ICECandidate) {
 			if i != nil {
 				if i.Typ == webrtc.ICECandidateTypeSrflx || i.Typ == webrtc.ICECandidateTypeRelay {
-					answererTimeToReceiveCandidate.Set(float64(time.Since(startTime).Milliseconds()))
+					stats.SetAnswererTimeToReceiveCandidate(float64(time.Since(startTime).Milliseconds()))
 					timeAnswererReceivedCandidate = time.Now()
 					c.ConnectionPair.LogAnswerer.Info("Answerer received candidate, sent over to other PC", "eventTime", timeAnswererReceivedCandidate,
 						"timeSinceStartMs", time.Since(startTime).Milliseconds(),
@@ -109,7 +102,7 @@ func newClient(cc *config.Config, iceServerInfo *stun.URI, provider string) (*Cl
 		// send it to the other peer
 		c.ConnectionPair.OfferPC.OnICECandidate(func(i *webrtc.ICECandidate) {
 			if i != nil {
-				offererTimeToReceiveCandidate.Set(float64(time.Since(startTime).Milliseconds()))
+				stats.SetOffererTimeToReceiveCandidate(float64(time.Since(startTime).Milliseconds()))
 				timeOffererReceivedCandidate = time.Now()
 				c.ConnectionPair.LogOfferer.Info("Offerer received candidate, sent over to other PC", "eventTime", timeOffererReceivedCandidate,
 					"timeSinceStartMs", time.Since(startTime).Milliseconds(),
@@ -247,6 +240,46 @@ func (c *Client) Stop() error {
 		c.Logger.Error("cannot close c.ConnectionPair.AnswerPC", "error", err)
 		return err
 	}
+
+	if c.config.Logging.API.Enabled {
+		// Convert data to JSON
+		jsonData, err := json.Marshal(c.stats)
+		if err != nil {
+			fmt.Println("Error marshalling JSON:", err)
+			return err
+		}
+
+		// Define the API endpoint
+		apiEndpoint := c.config.Logging.API.URI
+
+		// Create a new HTTP request
+		req, err := http.NewRequest("POST", apiEndpoint, bytes.NewBuffer(jsonData))
+		if err != nil {
+			fmt.Println("Error creating request:", err)
+			return err
+		}
+
+		// Set the appropriate headers
+		req.Header.Set("Content-Type", "application/json")
+
+		// Send the request using the HTTP client
+		client := &http.Client{}
+		resp, err := client.Do(req)
+		if err != nil {
+			fmt.Println("Error sending request:", err)
+			return err
+		}
+		defer resp.Body.Close()
+
+		// Check the response
+		if resp.StatusCode == http.StatusOK {
+			fmt.Println("Data sent successfully!")
+		} else {
+			fmt.Printf("Failed to send data. Status code: %d\n", resp.StatusCode)
+		}
+	}
+	j, _ := c.stats.ToJSON()
+	c.Logger.Info("Individual Test Run Completed", "data", j)
 
 	return nil
 }

@@ -2,16 +2,23 @@ package client
 
 import (
 	"encoding/json"
-	"fmt"
 	"log/slog"
 	"time"
 
 	"github.com/nimbleape/iceperf-agent/config"
+	"github.com/nimbleape/iceperf-agent/stats"
 	"github.com/nimbleape/iceperf-agent/util"
 	"github.com/pion/stun/v2"
 	"github.com/pion/webrtc/v4"
-	"github.com/prometheus/client_golang/prometheus"
 )
+
+type PC struct {
+	pc *webrtc.PeerConnection
+}
+
+func (pc *PC) Stop() {
+
+}
 
 type ConnectionPair struct {
 	OfferPC                 *webrtc.PeerConnection
@@ -23,13 +30,14 @@ type ConnectionPair struct {
 	sentInitialMessageViaDC time.Time
 	iceServerInfo           *stun.URI
 	provider                string
+	stats                   *stats.Stats
 }
 
-func NewConnectionPair(config *config.Config, iceServerInfo *stun.URI, provider string) (c *ConnectionPair, err error) {
-	return newConnectionPair(config, iceServerInfo, provider)
+func NewConnectionPair(config *config.Config, iceServerInfo *stun.URI, provider string, stats *stats.Stats) (c *ConnectionPair, err error) {
+	return newConnectionPair(config, iceServerInfo, provider, stats)
 }
 
-func newConnectionPair(cc *config.Config, iceServerInfo *stun.URI, provider string) (*ConnectionPair, error) {
+func newConnectionPair(cc *config.Config, iceServerInfo *stun.URI, provider string, stats *stats.Stats) (*ConnectionPair, error) {
 
 	logOfferer := cc.Logger.With("peer", "Offerer")
 	logAnswerer := cc.Logger.With("peer", "Answerer")
@@ -40,6 +48,7 @@ func newConnectionPair(cc *config.Config, iceServerInfo *stun.URI, provider stri
 		LogAnswerer:   logAnswerer,
 		iceServerInfo: iceServerInfo,
 		provider:      provider,
+		stats:         stats,
 	}
 
 	config := webrtc.Configuration{}
@@ -104,29 +113,12 @@ func (cp *ConnectionPair) createOfferer(config webrtc.Configuration) {
 
 	if cp.iceServerInfo.Scheme == stun.SchemeTypeTURN || cp.iceServerInfo.Scheme == stun.SchemeTypeTURNS {
 
-		labels := map[string]string{
-			"provider": cp.provider,
-			"scheme":   cp.iceServerInfo.Scheme.String(),
-			"protocol": cp.iceServerInfo.Proto.String(),
-			"port":     fmt.Sprintf("%d", cp.iceServerInfo.Port),
-		}
-
-		offererDcBytesSentTotal := prometheus.NewGauge(prometheus.GaugeOpts{
-			Name:        "offerer_DC_bytes_sent_total",
-			Namespace:   "iceperf",
-			Help:        "Offerer total bytes sent over data channel",
-			ConstLabels: labels,
-		})
-		offererCpBytesSentTotal := prometheus.NewGauge(prometheus.GaugeOpts{
-			Name:        "offerer_CP_bytes_sent_total",
-			Namespace:   "iceperf",
-			Help:        "Offerer total bytes sent over connection pair",
-			ConstLabels: labels,
-		})
-		cp.config.Registry.MustRegister(
-			offererDcBytesSentTotal,
-			offererCpBytesSentTotal,
-		)
+		// labels := map[string]string{
+		// 	"provider": cp.provider,
+		// 	"scheme":   cp.iceServerInfo.Scheme.String(),
+		// 	"protocol": cp.iceServerInfo.Proto.String(),
+		// 	"port":     fmt.Sprintf("%d", cp.iceServerInfo.Port),
+		// }
 
 		// Register channel opening handling
 		dc.OnOpen(func() {
@@ -174,13 +166,13 @@ func (cp *ConnectionPair) createOfferer(config webrtc.Configuration) {
 
 		dc.OnClose(func() {
 
-			dcBytesSentTotal, cpSentBytesTotal, _ := getBytesSent(pc, dc)
+			dcBytesSentTotal, iceTransportSentBytesTotal, _ := getBytesSent(pc, dc)
 
-			offererDcBytesSentTotal.Set(float64(dcBytesSentTotal))
-			offererCpBytesSentTotal.Set(float64(cpSentBytesTotal))
+			cp.stats.SetOffererDcBytesSentTotal(float64(dcBytesSentTotal))
+			cp.stats.SetOffererIceTransportBytesSentTotal(float64(iceTransportSentBytesTotal))
 
 			cp.LogOfferer.Info("Sent total", "dcSentBytesTotal", dcBytesSentTotal,
-				"cpSentBytesTotal", cpSentBytesTotal)
+				"cpSentBytesTotal", iceTransportSentBytesTotal)
 		})
 	}
 	cp.OfferPC = pc
@@ -193,36 +185,12 @@ func (cp *ConnectionPair) createAnswerer(config webrtc.Configuration) {
 
 	if cp.iceServerInfo.Scheme == stun.SchemeTypeTURN || cp.iceServerInfo.Scheme == stun.SchemeTypeTURNS {
 
-		labels := map[string]string{
-			"provider": cp.provider,
-			"scheme":   cp.iceServerInfo.Scheme.String(),
-			"protocol": cp.iceServerInfo.Proto.String(),
-			"port":     fmt.Sprintf("%d", cp.iceServerInfo.Port),
-		}
-
-		answererDcBytesReceivedTotal := prometheus.NewGauge(prometheus.GaugeOpts{
-			Name:        "answerer_DC_bytes_received_total",
-			Namespace:   "iceperf",
-			Help:        "Answerer total bytes received over data channel",
-			ConstLabels: labels,
-		})
-		answererCpBytesReceivedTotal := prometheus.NewGauge(prometheus.GaugeOpts{
-			Name:        "answerer_CP_bytes_received_total",
-			Namespace:   "iceperf",
-			Help:        "Answerer total bytes received over connection pair",
-			ConstLabels: labels,
-		})
-		latencyFirstPacket := prometheus.NewGauge(prometheus.GaugeOpts{
-			Name:        "latency_first_packet",
-			Namespace:   "iceperf",
-			Help:        "Latency first packet",
-			ConstLabels: labels,
-		})
-		cp.config.Registry.MustRegister(
-			answererDcBytesReceivedTotal,
-			answererCpBytesReceivedTotal,
-			latencyFirstPacket,
-		)
+		// labels := map[string]string{
+		// 	"provider": cp.provider,
+		// 	"scheme":   cp.iceServerInfo.Scheme.String(),
+		// 	"protocol": cp.iceServerInfo.Proto.String(),
+		// 	"port":     fmt.Sprintf("%d", cp.iceServerInfo.Port),
+		// }
 
 		pc.OnDataChannel(func(dc *webrtc.DataChannel) {
 			var totalBytesReceived uint64
@@ -247,19 +215,22 @@ func (cp *ConnectionPair) createAnswerer(config webrtc.Configuration) {
 					// bps := float64(atomic.LoadUint64(&totalBytesReceived)*8) / time.Since(since).Seconds()
 					cp.LogAnswerer.Info("On ticker: Calculated throughput", "throughput", bps/1024/1024,
 						"eventTime", time.Now())
+
+					cp.stats.AddThroughput(time.Since(since).Milliseconds(), bps/1024/1024)
 				}
 				bps := 8 * float64(totalBytesReceived) / float64(time.Since(since).Seconds())
 				// bps := float64(atomic.LoadUint64(&totalBytesReceived)*8) / time.Since(since).Seconds()
 				cp.LogAnswerer.Info("On ticker: Calculated throughput", "throughput", bps/1024/1024,
 					"eventTime", time.Now(),
 					"timeSinceStartMs", time.Since(since).Milliseconds())
+				cp.stats.AddThroughput(time.Since(since).Milliseconds(), bps/1024/1024)
 			})
 
 			// Register the OnMessage to handle incoming messages
 			dc.OnMessage(func(dcMsg webrtc.DataChannelMessage) {
 
 				if !hasReceivedData {
-					latencyFirstPacket.Set(float64(time.Since(cp.sentInitialMessageViaDC).Milliseconds()))
+					cp.stats.SetLatencyFirstPacket(float64(time.Since(cp.sentInitialMessageViaDC).Milliseconds()))
 					cp.LogAnswerer.Info("Received first Packet", "latencyFirstPacketInMs", time.Since(cp.sentInitialMessageViaDC).Milliseconds())
 					hasReceivedData = true
 				}
@@ -273,13 +244,13 @@ func (cp *ConnectionPair) createAnswerer(config webrtc.Configuration) {
 
 			dc.OnClose(func() {
 
-				dcBytesReceivedTotal, cpBytesReceivedTotal, _ := getBytesReceived(pc, dc)
+				dcBytesReceivedTotal, iceTransportBytesReceivedTotal, _ := getBytesReceived(pc, dc)
 
-				answererDcBytesReceivedTotal.Set(float64(dcBytesReceivedTotal))
-				answererCpBytesReceivedTotal.Set(float64(cpBytesReceivedTotal))
+				cp.stats.SetAnswererDcBytesReceivedTotal(float64(dcBytesReceivedTotal))
+				cp.stats.SetAnswererIceTransportBytesReceivedTotal(float64(iceTransportBytesReceivedTotal))
 
 				cp.LogAnswerer.Info("Received total", "dcReceivedBytesTotal", dcBytesReceivedTotal,
-					"cpReceivedBytesTotal", cpBytesReceivedTotal)
+					"iceTransportReceivedBytesTotal", iceTransportBytesReceivedTotal)
 			})
 		})
 	}
@@ -296,6 +267,7 @@ func getBytesReceived(pc *webrtc.PeerConnection, dc *webrtc.DataChannel) (uint64
 	}
 
 	iceTransportStats := stats["iceTransport"].(webrtc.TransportStats)
+
 	return dcStats.BytesReceived, iceTransportStats.BytesReceived, ok
 }
 
@@ -308,5 +280,6 @@ func getBytesSent(pc *webrtc.PeerConnection, dc *webrtc.DataChannel) (uint64, ui
 	}
 
 	iceTransportStats := stats["iceTransport"].(webrtc.TransportStats)
+
 	return dcStats.BytesSent, iceTransportStats.BytesSent, ok
 }
