@@ -102,14 +102,16 @@ func newClient(cc *config.Config, iceServerInfo *stun.URI, provider string, test
 		// send it to the other peer
 		c.ConnectionPair.OfferPC.OnICECandidate(func(i *webrtc.ICECandidate) {
 			if i != nil {
-				stats.SetOffererTimeToReceiveCandidate(float64(time.Since(startTime).Milliseconds()))
-				timeOffererReceivedCandidate = time.Now()
-				c.ConnectionPair.LogOfferer.Info("Offerer received candidate, sent over to other PC", "eventTime", timeOffererReceivedCandidate,
-					"timeSinceStartMs", time.Since(startTime).Milliseconds(),
-					"candidateType", i.Typ,
-					"relayAddress", i.RelatedAddress,
-					"relayPort", i.RelatedPort)
-				util.Check(c.ConnectionPair.AnswerPC.AddICECandidate(i.ToJSON()))
+				if i.Typ == webrtc.ICECandidateTypeSrflx || i.Typ == webrtc.ICECandidateTypeRelay {
+					stats.SetOffererTimeToReceiveCandidate(float64(time.Since(startTime).Milliseconds()))
+					timeOffererReceivedCandidate = time.Now()
+					c.ConnectionPair.LogOfferer.Info("Offerer received candidate, sent over to other PC", "eventTime", timeOffererReceivedCandidate,
+						"timeSinceStartMs", time.Since(startTime).Milliseconds(),
+						"candidateType", i.Typ,
+						"relayAddress", i.RelatedAddress,
+						"relayPort", i.RelatedPort)
+					util.Check(c.ConnectionPair.AnswerPC.AddICECandidate(i.ToJSON()))
+				}
 			}
 		})
 	}
