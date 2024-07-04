@@ -9,7 +9,7 @@ import (
 	"github.com/nimbleape/iceperf-agent/config"
 	"github.com/pion/stun/v2"
 	"github.com/pion/webrtc/v4"
-	log "github.com/sirupsen/logrus"
+	// log "github.com/sirupsen/logrus"
 )
 
 type Driver struct {
@@ -38,17 +38,17 @@ func (d *Driver) GetIceServers() (iceServers []webrtc.ICEServer, err error) {
 	req.SetBasicAuth(d.Config.HttpUsername, d.Config.HttpPassword)
 
 	if err != nil {
-		log.WithFields(log.Fields{
-			"error": err,
-		}).Error("Error forming http request")
+		// log.WithFields(log.Fields{
+		// 	"error": err,
+		// }).Error("Error forming http request")
 		return nil, err
 	}
 
 	res, err := client.Do(req)
 	if err != nil {
-		log.WithFields(log.Fields{
-			"error": err,
-		}).Error("Error doing http response")
+		// log.WithFields(log.Fields{
+		// 	"error": err,
+		// }).Error("Error doing http response")
 		return nil, err
 	}
 
@@ -56,17 +56,17 @@ func (d *Driver) GetIceServers() (iceServers []webrtc.ICEServer, err error) {
 	//check the code of the response
 	if res.StatusCode != 201 {
 		err = errors.New("error from twilio api")
-		log.WithFields(log.Fields{
-			"error": err,
-		}).Error("Error status code http response")
+		// log.WithFields(log.Fields{
+		// 	"error": err,
+		// }).Error("Error status code http response")
 		return nil, err
 	}
 
 	responseData, err := io.ReadAll(res.Body)
 	if err != nil {
-		log.WithFields(log.Fields{
-			"error": err,
-		}).Error("Error reading http response")
+		// log.WithFields(log.Fields{
+		// 	"error": err,
+		// }).Error("Error reading http response")
 		return nil, err
 	}
 
@@ -87,7 +87,7 @@ func (d *Driver) GetIceServers() (iceServers []webrtc.ICEServer, err error) {
 			continue
 		}
 
-		if (info.Scheme == stun.SchemeTypeTURN) {
+		if info.Scheme == stun.SchemeTypeTURN {
 			tempTurnHost = info.Host
 		}
 
@@ -103,8 +103,6 @@ func (d *Driver) GetIceServers() (iceServers []webrtc.ICEServer, err error) {
 		}
 		iceServers = append(iceServers, s)
 	}
-
-
 
 	//apparently if you go and make a tls turn uri it will work
 	s := webrtc.ICEServer{

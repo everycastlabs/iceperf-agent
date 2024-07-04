@@ -2,44 +2,53 @@ package client
 
 import (
 	"encoding/json"
-	"sync/atomic"
+	"log/slog"
 	"time"
 
 	"github.com/nimbleape/iceperf-agent/config"
+	"github.com/nimbleape/iceperf-agent/stats"
 	"github.com/nimbleape/iceperf-agent/util"
 	"github.com/pion/stun/v2"
 	"github.com/pion/webrtc/v4"
-	log "github.com/sirupsen/logrus"
 )
+
+type PC struct {
+	pc *webrtc.PeerConnection
+}
+
+func (pc *PC) Stop() {
+
+}
 
 type ConnectionPair struct {
 	OfferPC                 *webrtc.PeerConnection
+	OfferDC                 *webrtc.DataChannel
 	AnswerPC                *webrtc.PeerConnection
-	LogOfferer              *log.Entry
-	LogAnswerer             *log.Entry
+	LogOfferer              *slog.Logger
+	LogAnswerer             *slog.Logger
 	config                  *config.Config
 	sentInitialMessageViaDC time.Time
 	iceServerInfo           *stun.URI
+	provider                string
+	stats                   *stats.Stats
 }
 
-func NewConnectionPair(config *config.Config, iceServerInfo *stun.URI) (c *ConnectionPair, err error) {
-	return newConnectionPair(config, iceServerInfo)
+func NewConnectionPair(config *config.Config, iceServerInfo *stun.URI, provider string, stats *stats.Stats) (c *ConnectionPair, err error) {
+	return newConnectionPair(config, iceServerInfo, provider, stats)
 }
 
-func newConnectionPair(cc *config.Config, iceServerInfo *stun.URI) (*ConnectionPair, error) {
+func newConnectionPair(cc *config.Config, iceServerInfo *stun.URI, provider string, stats *stats.Stats) (*ConnectionPair, error) {
 
-	logOfferer := cc.Logger.WithFields(log.Fields{
-		"peer": "Offerer",
-	})
-	logAnswerer := cc.Logger.WithFields(log.Fields{
-		"peer": "Answerer",
-	})
+	logOfferer := cc.Logger.With("peer", "Offerer")
+	logAnswerer := cc.Logger.With("peer", "Answerer")
 
 	cp := &ConnectionPair{
 		config:        cc,
 		LogOfferer:    logOfferer,
 		LogAnswerer:   logAnswerer,
 		iceServerInfo: iceServerInfo,
+		provider:      provider,
+		stats:         stats,
 	}
 
 	config := webrtc.Configuration{}
@@ -100,15 +109,29 @@ func (cp *ConnectionPair) createOfferer(config webrtc.Configuration) {
 	dc, err := pc.CreateDataChannel("data", options)
 	util.Check(err)
 
+	cp.OfferDC = dc
+
 	if cp.iceServerInfo.Scheme == stun.SchemeTypeTURN || cp.iceServerInfo.Scheme == stun.SchemeTypeTURNS {
+
+		// labels := map[string]string{
+		// 	"provider": cp.provider,
+		// 	"scheme":   cp.iceServerInfo.Scheme.String(),
+		// 	"protocol": cp.iceServerInfo.Proto.String(),
+		// 	"port":     fmt.Sprintf("%d", cp.iceServerInfo.Port),
+		// }
 
 		// Register channel opening handling
 		dc.OnOpen(func() {
 
-			cp.LogOfferer.WithFields(log.Fields{
-				"dataChannelLabel": dc.Label(),
-				"dataChannelId":    dc.ID(),
-			}).Info("OnOpen: Start sending a series of 1024-byte packets as fast as it can")
+			stats := pc.GetStats()
+			iceTransportStats := stats["iceTransport"].(webrtc.TransportStats)
+			// for k, v := range stats {
+			cp.LogOfferer.Info("Offerer Stats", "iceTransportStats", iceTransportStats.BytesReceived)
+			//}
+
+			cp.LogOfferer.Info("OnOpen: Start sending a series of 1024-byte packets as fast as it can", "dataChannelLabel", dc.Label(),
+				"dataChannelId", dc.ID(),
+			)
 
 			for {
 				if !hasSentData {
@@ -116,7 +139,9 @@ func (cp *ConnectionPair) createOfferer(config webrtc.Configuration) {
 					hasSentData = true
 				}
 				err2 := dc.Send(buf)
-				util.Check(err2)
+				if err2 != nil {
+					break
+				}
 
 				if dc.BufferedAmount() > maxBufferedAmount {
 					// Wait until the bufferedAmount becomes lower than the threshold
@@ -138,6 +163,17 @@ func (cp *ConnectionPair) createOfferer(config webrtc.Configuration) {
 			default:
 			}
 		})
+
+		dc.OnClose(func() {
+
+			dcBytesSentTotal, iceTransportSentBytesTotal, _ := getBytesSent(pc, dc)
+
+			cp.stats.SetOffererDcBytesSentTotal(float64(dcBytesSentTotal))
+			cp.stats.SetOffererIceTransportBytesSentTotal(float64(iceTransportSentBytesTotal))
+
+			cp.LogOfferer.Info("Sent total", "dcSentBytesTotal", dcBytesSentTotal,
+				"cpSentBytesTotal", iceTransportSentBytesTotal)
+		})
 	}
 	cp.OfferPC = pc
 }
@@ -149,17 +185,23 @@ func (cp *ConnectionPair) createAnswerer(config webrtc.Configuration) {
 
 	if cp.iceServerInfo.Scheme == stun.SchemeTypeTURN || cp.iceServerInfo.Scheme == stun.SchemeTypeTURNS {
 
+		// labels := map[string]string{
+		// 	"provider": cp.provider,
+		// 	"scheme":   cp.iceServerInfo.Scheme.String(),
+		// 	"protocol": cp.iceServerInfo.Proto.String(),
+		// 	"port":     fmt.Sprintf("%d", cp.iceServerInfo.Port),
+		// }
+
 		pc.OnDataChannel(func(dc *webrtc.DataChannel) {
 			var totalBytesReceived uint64
 
-			hasRecievedData := false
+			hasReceivedData := false
 
 			// Register channel opening handling
 			dc.OnOpen(func() {
-				cp.LogAnswerer.WithFields(log.Fields{
-					"dataChannelLabel": dc.Label(),
-					"dataChannelId":    dc.ID(),
-				}).Info("OnOpen: Start receiving data")
+
+				cp.LogAnswerer.Info("OnOpen: Start receiving data", "dataChannelLabel", dc.Label(),
+					"dataChannelId", dc.ID())
 
 				since := time.Now()
 
@@ -169,34 +211,75 @@ func (cp *ConnectionPair) createAnswerer(config webrtc.Configuration) {
 					if pc.ConnectionState() != webrtc.PeerConnectionStateConnected {
 						break
 					}
-					bps := float64(atomic.LoadUint64(&totalBytesReceived)*8) / time.Since(since).Seconds()
-					cp.LogAnswerer.WithFields(log.Fields{
-						"throughput": bps / 1024 / 1024,
-						"eventTime":  time.Now(),
-					}).Info("On ticker: Calculated throughput")
+					bps := 8 * float64(totalBytesReceived) / float64(time.Since(since).Seconds())
+					// bps := float64(atomic.LoadUint64(&totalBytesReceived)*8) / time.Since(since).Seconds()
+					cp.LogAnswerer.Info("On ticker: Calculated throughput", "throughput", bps/1024/1024,
+						"eventTime", time.Now())
+
+					cp.stats.AddThroughput(time.Since(since).Milliseconds(), bps/1024/1024)
 				}
-				bps := float64(atomic.LoadUint64(&totalBytesReceived)*8) / time.Since(since).Seconds()
-				cp.LogAnswerer.WithFields(log.Fields{
-					"throughput":       bps / 1024 / 1024,
-					"eventTime":        time.Now(),
-					"timeSinceStartMs": time.Since(since).Milliseconds(),
-				}).Info("On ticker: Calculated throughput")
+				bps := 8 * float64(totalBytesReceived) / float64(time.Since(since).Seconds())
+				// bps := float64(atomic.LoadUint64(&totalBytesReceived)*8) / time.Since(since).Seconds()
+				cp.LogAnswerer.Info("On ticker: Calculated throughput", "throughput", bps/1024/1024,
+					"eventTime", time.Now(),
+					"timeSinceStartMs", time.Since(since).Milliseconds())
+				cp.stats.AddThroughput(time.Since(since).Milliseconds(), bps/1024/1024)
 			})
 
 			// Register the OnMessage to handle incoming messages
 			dc.OnMessage(func(dcMsg webrtc.DataChannelMessage) {
-				if !hasRecievedData {
-					cp.LogAnswerer.WithFields(log.Fields{
-						"latencyFirstPacketInMs": time.Since(cp.sentInitialMessageViaDC).Milliseconds(),
-					}).Info("Received first Packet")
-					hasRecievedData = true
-				}
-				n := len(dcMsg.Data)
-				atomic.AddUint64(&totalBytesReceived, uint64(n))
 
+				if !hasReceivedData {
+					cp.stats.SetLatencyFirstPacket(float64(time.Since(cp.sentInitialMessageViaDC).Milliseconds()))
+					cp.LogAnswerer.Info("Received first Packet", "latencyFirstPacketInMs", time.Since(cp.sentInitialMessageViaDC).Milliseconds())
+					hasReceivedData = true
+				}
+				totalBytesReceivedTmp, _, ok := getBytesReceived(pc, dc)
+				if ok {
+					totalBytesReceived = totalBytesReceivedTmp
+					// cp.LogAnswerer.Info("Received Bytes So Far", "dcReceivedBytes", totalBytesReceivedTmp,
+					// 	"cpReceivedBytes", cpTotalBytesReceivedTmp)
+				}
+			})
+
+			dc.OnClose(func() {
+
+				dcBytesReceivedTotal, iceTransportBytesReceivedTotal, _ := getBytesReceived(pc, dc)
+
+				cp.stats.SetAnswererDcBytesReceivedTotal(float64(dcBytesReceivedTotal))
+				cp.stats.SetAnswererIceTransportBytesReceivedTotal(float64(iceTransportBytesReceivedTotal))
+
+				cp.LogAnswerer.Info("Received total", "dcReceivedBytesTotal", dcBytesReceivedTotal,
+					"iceTransportReceivedBytesTotal", iceTransportBytesReceivedTotal)
 			})
 		})
 	}
 
 	cp.AnswerPC = pc
+}
+
+func getBytesReceived(pc *webrtc.PeerConnection, dc *webrtc.DataChannel) (uint64, uint64, bool) {
+	stats := pc.GetStats()
+
+	dcStats, ok := stats.GetDataChannelStats(dc)
+	if !ok {
+		return 0, 0, ok
+	}
+
+	iceTransportStats := stats["iceTransport"].(webrtc.TransportStats)
+
+	return dcStats.BytesReceived, iceTransportStats.BytesReceived, ok
+}
+
+func getBytesSent(pc *webrtc.PeerConnection, dc *webrtc.DataChannel) (uint64, uint64, bool) {
+	stats := pc.GetStats()
+
+	dcStats, ok := stats.GetDataChannelStats(dc)
+	if !ok {
+		return 0, 0, ok
+	}
+
+	iceTransportStats := stats["iceTransport"].(webrtc.TransportStats)
+
+	return dcStats.BytesSent, iceTransportStats.BytesSent, ok
 }

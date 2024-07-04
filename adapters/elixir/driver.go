@@ -9,7 +9,6 @@ import (
 	"github.com/nimbleape/iceperf-agent/config"
 	"github.com/pion/stun/v2"
 	"github.com/pion/webrtc/v4"
-	log "github.com/sirupsen/logrus"
 )
 
 type Driver struct {
@@ -31,25 +30,25 @@ func (d *Driver) GetIceServers() (iceServers []webrtc.ICEServer, err error) {
 	client := &http.Client{}
 
 	if err != nil {
-		log.WithFields(log.Fields{
-			"error": err,
-		}).Error("Error forming http request URL")
+		// log.WithFields(log.Fields{
+		// 	"error": err,
+		// }).Error("Error forming http request URL")
 		return nil, err
 	}
 	req, err := http.NewRequest("POST", d.Config.RequestUrl+"&username="+d.Config.HttpUsername, nil)
 
 	if err != nil {
-		log.WithFields(log.Fields{
-			"error": err,
-		}).Error("Error forming http request")
+		// log.WithFields(log.Fields{
+		// 	"error": err,
+		// }).Error("Error forming http request")
 		return nil, err
 	}
 
 	res, err := client.Do(req)
 	if err != nil {
-		log.WithFields(log.Fields{
-			"error": err,
-		}).Error("Error doing http response")
+		// log.WithFields(log.Fields{
+		// 	"error": err,
+		// }).Error("Error doing http response")
 		return nil, err
 	}
 
@@ -57,17 +56,17 @@ func (d *Driver) GetIceServers() (iceServers []webrtc.ICEServer, err error) {
 	//check the code of the response
 	if res.StatusCode != 200 {
 		err = errors.New("error from elixir api")
-		log.WithFields(log.Fields{
-			"error": err,
-		}).Error("Error status code http response")
+		// log.WithFields(log.Fields{
+		// 	"error": err,
+		// }).Error("Error status code http response")
 		return nil, err
 	}
 
 	responseData, err := io.ReadAll(res.Body)
 	if err != nil {
-		log.WithFields(log.Fields{
-			"error": err,
-		}).Error("Error reading http response")
+		// log.WithFields(log.Fields{
+		// 	"error": err,
+		// }).Error("Error reading http response")
 		return nil, err
 	}
 

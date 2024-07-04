@@ -8,7 +8,6 @@ import (
 	"github.com/nimbleape/iceperf-agent/config"
 	"github.com/pion/stun/v2"
 	"github.com/pion/webrtc/v4"
-	log "github.com/sirupsen/logrus"
 )
 
 type Driver struct {
@@ -28,17 +27,17 @@ type MeteredIceServers struct {
 func (d *Driver) GetIceServers() (iceServers []webrtc.ICEServer, err error) {
 	res, err := http.Get(d.Config.RequestUrl + "?apiKey=" + d.Config.ApiKey)
 	if err != nil {
-		log.WithFields(log.Fields{
-			"error": err,
-		}).Error("Error making http request")
+		// log.WithFields(log.Fields{
+		// 	"error": err,
+		// }).Error("Error making http request")
 		return nil, err
 	}
 
 	responseData, err := io.ReadAll(res.Body)
 	if err != nil {
-		log.WithFields(log.Fields{
-			"error": err,
-		}).Error("Error reading http response")
+		// log.WithFields(log.Fields{
+		// 	"error": err,
+		// }).Error("Error reading http response")
 		return nil, err
 	}
 

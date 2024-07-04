@@ -5,7 +5,7 @@ package main
 
 import (
 	"fmt"
-	"net/http"
+	"log/slog"
 	"os"
 	"time"
 
@@ -14,25 +14,20 @@ import (
 	"github.com/nimbleape/iceperf-agent/version"
 	"github.com/pion/stun/v2"
 	"github.com/pion/webrtc/v4"
+	"github.com/prometheus/client_golang/prometheus"
+
+	// "github.com/prometheus/client_golang/prometheus/push"
+
 	"github.com/rs/xid"
-	"github.com/sirupsen/logrus"
-	log "github.com/sirupsen/logrus"
+
+	// slogloki "github.com/samber/slog-loki/v3"
+
+	slogmulti "github.com/samber/slog-multi"
 	"github.com/urfave/cli/v2"
-	"github.com/yukitsune/lokirus"
+
+	// "github.com/grafana/loki-client-go/loki"
+	loki "github.com/magnetde/slog-loki"
 )
-
-type transport struct {
-	authHeaders         map[string]string
-	underlyingTransport http.RoundTripper
-}
-
-func (t *transport) RoundTrip(req *http.Request) (*http.Response, error) {
-	for headerName, headerValue := range t.authHeaders {
-		req.Header.Add(headerName, headerValue)
-	}
-
-	return t.underlyingTransport.RoundTrip(req)
-}
 
 func main() {
 	app := &cli.App{
@@ -64,62 +59,136 @@ func runService(ctx *cli.Context) error {
 
 	testRunId := xid.New()
 
+	lvl := new(slog.LevelVar)
+	lvl.Set(slog.LevelInfo)
+
 	// Configure the logger
-	logg := log.New()
+
+	var logg *slog.Logger
 
 	if config.Logging.Loki.Enabled {
 
-		opts := lokirus.NewLokiHookOptions().
-			// Grafana doesn't have a "panic" level, but it does have a "critical" level
-			// https://grafana.com/docs/grafana/latest/explore/logs-integration/
-			WithLevelMap(lokirus.LevelMap{log.PanicLevel: "critical"}).
-			WithFormatter(&logrus.JSONFormatter{}).
-			WithStaticLabels(lokirus.Labels{
-				"app": "iceperf",
-			})
+		// config, _ := loki.NewDefaultConfig(config.Logging.Loki.URL)
+		// // config.TenantID = "xyz"
+		// client, _ := loki.New(config)
 
-		if config.Logging.Loki.UseBasicAuth {
-			opts.WithBasicAuth(config.Logging.Loki.Username, config.Logging.Loki.Password)
+		lokiHandler := loki.NewHandler(config.Logging.Loki.URL, loki.WithLabelsEnabled(loki.LabelAll...))
+
+		logg = slog.New(
+			slogmulti.Fanout(
+				slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
+					Level: slog.LevelInfo,
+				}),
+				lokiHandler,
+			),
+		).With("app", "iceperftest")
+
+		// stop loki client and purge buffers
+		defer lokiHandler.Close()
+
+		// opts := lokirus.NewLokiHookOptions().
+		// 	// Grafana doesn't have a "panic" level, but it does have a "critical" level
+		// 	// https://grafana.com/docs/grafana/latest/explore/logs-integration/
+		// 	WithLevelMap(lokirus.LevelMap{log.PanicLevel: "critical"}).
+		// 	WithFormatter(&logrus.JSONFormatter{}).
+		// 	WithStaticLabels(lokirus.Labels{
+		// 		"app": "iceperftest",
+		// 	})
+
+		// if config.Logging.Loki.UseBasicAuth {
+		// 	opts.WithBasicAuth(config.Logging.Loki.Username, config.Logging.Loki.Password)
+		// }
+
+		// if config.Logging.Loki.UseHeadersAuth {
+		// 	httpClient := &http.Client{Transport: &transport{underlyingTransport: http.DefaultTransport, authHeaders: config.Logging.Loki.AuthHeaders}}
+
+		// 	opts.WithHttpClient(httpClient)
+		// }
+
+		// hook := lokirus.NewLokiHookWithOpts(
+		// 	config.Logging.Loki.URL,
+		// 	opts,
+		// 	log.InfoLevel,
+		// 	log.WarnLevel,
+		// 	log.ErrorLevel,
+		// 	log.FatalLevel)
+
+		// logg.AddHook(hook)
+
+		// lokiHookConfig := &lokihook.Config{
+		// 	// the loki api url
+		// 	URL: config.Logging.Loki.URL,
+		// 	// (optional, default: severity) the label's key to distinguish log's level, it will be added to Labels map
+		// 	LevelName: "level",
+		// 	// the labels which will be sent to loki, contains the {levelname: level}
+		// 	Labels: map[string]string{
+		// 		"app": "iceperftest",
+		// 	},
+		// }
+		// hook, err := lokihook.NewHook(lokiHookConfig)
+		// if err != nil {
+		// 	log.Error(err)
+		// } else {
+		// 	log.AddHook(hook)
+		// }
+
+		// hook := loki.NewHook(config.Logging.Loki.URL, loki.WithLabel("app", "iceperftest"), loki.WithFormatter(&logrus.JSONFormatter{}), loki.WithLevel(log.InfoLevel))
+		// defer hook.Close()
+
+		// log.AddHook(hook)
+	} else {
+		handlerOpts := &slog.HandlerOptions{
+			Level: slog.LevelInfo,
 		}
-
-		if config.Logging.Loki.UseHeadersAuth {
-			httpClient := &http.Client{Transport: &transport{underlyingTransport: http.DefaultTransport, authHeaders: config.Logging.Loki.AuthHeaders}}
-
-			opts.WithHttpClient(httpClient)
-		}
-
-		hook := lokirus.NewLokiHookWithOpts(
-			config.Logging.Loki.URL,
-			opts,
-			log.InfoLevel,
-			log.WarnLevel,
-			log.ErrorLevel,
-			log.FatalLevel)
-
-		logg.AddHook(hook)
+		logg = slog.New(slog.NewTextHandler(os.Stderr, handlerOpts))
 	}
+	// slog.SetDefault(logg)
 
 	// logg.SetFormatter(&log.JSONFormatter{PrettyPrint: true})
-	setLogLevel(logg, config.Logging.Level)
 
-	logger := logg.WithFields(log.Fields{
-		"testRunId": testRunId,
-	})
+	logger := logg.With("testRunId", testRunId)
 
 	// TODO we will make a new client for each ICE Server URL from each provider
 	// get ICE servers and loop them
 	ICEServers, err := client.GetIceServers(config)
 	if err != nil {
-		logger.Fatal("Error getting ICE servers")
+		logger.Error("Error getting ICE servers")
+		//this should be a fatal
 	}
-	// log.WithFields(log.Fields{
-	// 	"ICEServers": ICEServers,
-	// }).Info("ICE Servers in use")
+
+	config.Registry = prometheus.NewRegistry()
+	// pusher := push.New(config.Logging.Loki.URL, "grafanacloud-nimbleape-prom").Gatherer(config.Registry)
+	// pusher := push.New()
+	// pusher.Gatherer(config.Registry)
+	// promClient := promwrite.NewClient(config.Logging.Prometheus.URL)
+
+	// TEST writing to qryn
+	// if _, err := promClient.Write(
+	// 	ctx.Context,
+	// 	&promwrite.WriteRequest{
+	// 		TimeSeries: []promwrite.TimeSeries{
+	// 			{
+	// 				Labels: []promwrite.Label{
+	// 					{
+	// 						Name:  "__name__",
+	// 						Value: "test_metric",
+	// 					},
+	// 				},
+	// 				Sample: promwrite.Sample{
+	// 					Time:  time.Now(),
+	// 					Value: 123,
+	// 				},
+	// 			},
+	// 		},
+	// 	},
+	// 	promwrite.WriteHeaders(config.Logging.Prometheus.AuthHeaders),
+	// ); err != nil {
+	// 	logger.Error("Error writing to Qryn", err)
+	// }
+	// end TEST
 
 	for provider, iss := range ICEServers {
-		providerLogger := logger.WithFields(log.Fields{
-			"Provider": provider,
-		})
+		providerLogger := logger.With("Provider", provider)
 
 		providerLogger.Info("Provider Starting")
 
@@ -133,43 +202,45 @@ func runService(ctx *cli.Context) error {
 
 			runId := xid.New()
 
-			iceServerLogger := providerLogger.WithFields(log.Fields{
-				"iceServerTestRunId": runId,
-				"schemeAndProtocol":  iceServerInfo.Scheme.String() + "-" + iceServerInfo.Proto.String(),
-			})
+			iceServerLogger := providerLogger.With("iceServerTestRunId", runId,
+				"schemeAndProtocol", iceServerInfo.Scheme.String()+"-"+iceServerInfo.Proto.String(),
+			)
 
-			iceServerLogger.WithFields(log.Fields{
-				"iceServerHost":     iceServerInfo.Host,
-				"iceServerProtocol": iceServerInfo.Proto.String(),
-				"iceServerPort":     iceServerInfo.Port,
-				"iceServerScheme":   iceServerInfo.Scheme.String(),
-			}).Info("Starting New Client")
+			iceServerLogger.Info("Starting New Client", "iceServerHost", iceServerInfo.Host,
+				"iceServerProtocol", iceServerInfo.Proto.String(),
+				"iceServerPort", iceServerInfo.Port,
+				"iceServerScheme", iceServerInfo.Scheme.String(),
+			)
 			config.Logger = iceServerLogger
 
 			config.WebRTCConfig.ICEServers = []webrtc.ICEServer{is}
 			//if the ice server is a stun then set the
+			testDuration := 20 * time.Second
 			if iceServerInfo.Scheme == stun.SchemeTypeSTUN || iceServerInfo.Scheme == stun.SchemeTypeSTUNS {
 				config.WebRTCConfig.ICETransportPolicy = webrtc.ICETransportPolicyAll
+				testDuration = 2 * time.Second
 			} else {
 				config.WebRTCConfig.ICETransportPolicy = webrtc.ICETransportPolicyRelay
 			}
 
-			timer := time.NewTimer(20 * time.Second)
-			c, err := client.NewClient(config, iceServerInfo)
+			timer := time.NewTimer(testDuration)
+			c, err := client.NewClient(config, iceServerInfo, provider, testRunId)
 			if err != nil {
 				return err
 			}
 
 			iceServerLogger.Info("Calling Run()")
 			c.Run()
-			iceServerLogger.Info("Called Run(), waiting for timer 10 seconds")
+			iceServerLogger.Info("Called Run(), waiting for timer", "seconds", testDuration.Seconds())
 			<-timer.C
 			iceServerLogger.Info("Calling Stop()")
 			c.Stop()
+			<-time.After(1 * time.Second)
 			iceServerLogger.Info("Finished")
 		}
 		providerLogger.Info("Provider Finished")
 	}
+	logger.Info("Finished Test Run")
 
 	// c, err := client.NewClient(config)
 	// if err != nil {
@@ -178,6 +249,75 @@ func runService(ctx *cli.Context) error {
 	// defer c.Stop()
 
 	// c.Run()
+
+	// util.Check(pusher.Push(config.Logging.Prometheus.URL))
+
+	// write all metrics to qryn at once
+	// mf, err := config.Registry.Gather()
+	// if err != nil {
+	// 	logger.Error("Error gathering metrics from registry", err)
+	// }
+
+	// if len(mf) > 0 {
+
+	// 	timenow := time.Now()
+
+	// 	ts := []promwrite.TimeSeries{}
+	// 	for _, m := range mf {
+
+	// 		//loop thorugh each metric
+	// 		for _, met := range m.GetMetric() {
+	// 			var v float64
+	// 			switch m.GetType().String() {
+	// 			case "GAUGE":
+	// 				v = *met.Gauge.Value
+	// 				//add more
+	// 			}
+
+	// 			labels := []promwrite.Label{
+	// 				{
+	// 					Name:  "__name__",
+	// 					Value: m.GetName(),
+	// 				},
+	// 				{
+	// 					Name:  "description",
+	// 					Value: m.GetHelp(),
+	// 				},
+	// 				{
+	// 					Name:  "type",
+	// 					Value: m.GetType().String(),
+	// 				},
+	// 			}
+
+	// 			for _, lp := range met.GetLabel() {
+	// 				labels = append(labels, promwrite.Label{Name: *lp.Name, Value: *lp.Value})
+	// 			}
+
+	// 			ts = append(ts, promwrite.TimeSeries{
+	// 				Labels: labels,
+	// 				Sample: promwrite.Sample{
+	// 					Time:  timenow,
+	// 					Value: v,
+	// 				},
+	// 			})
+
+	// 			logger.Info("got metrics", "labels", met.Label, "name", m.GetName(), "type", m.GetType(), "value", v, "unit", m.GetUnit(), "description", m.GetHelp())
+	// 		}
+	// 	}
+	// 	_, err := promClient.Write(
+	// 		ctx.Context,
+	// 		&promwrite.WriteRequest{
+	// 			TimeSeries: ts,
+	// 		},
+	// 		promwrite.WriteHeaders(config.Logging.Prometheus.AuthHeaders),
+	// 	)
+	// 	if err != nil {
+	// 		logger.Error("Error writing to Qryn", err)
+	// 	}
+	// 	logger.Info("Wrote stats to prom")
+
+	// }
+
 	return nil
 }
 
@@ -200,21 +340,21 @@ func getConfig(c *cli.Context) (*config.Config, error) {
 	return conf, nil
 }
 
-func setLogLevel(logger *log.Logger, level string) {
-	switch level {
-	case "debug":
-		logger.SetLevel(log.DebugLevel)
-	case "error":
-		logger.SetLevel(log.ErrorLevel)
-	case "fatal":
-		logger.SetLevel(log.FatalLevel)
-	case "panic":
-		logger.SetLevel(log.PanicLevel)
-	case "trace":
-		logger.SetLevel(log.TraceLevel)
-	case "warn":
-		logger.SetLevel(log.WarnLevel)
-	default:
-		logger.SetLevel(log.InfoLevel)
-	}
-}
+// func setLogLevel(logger *log.Logger, level string) {
+// 	switch level {
+// 	case "debug":
+// 		logger.SetLevel(slog.DebugLevel)
+// 	case "error":
+// 		logger.SetLevel(slog.ErrorLevel)
+// 	case "fatal":
+// 		logger.SetLevel(slog.FatalLevel)
+// 	case "panic":
+// 		logger.SetLevel(slog.PanicLevel)
+// 	case "trace":
+// 		logger.SetLevel(slog.TraceLevel)
+// 	case "warn":
+// 		logger.SetLevel(slog.WarnLevel)
+// 	default:
+// 		logger.SetLevel(slog.InfoLevel)
+// 	}
+// }

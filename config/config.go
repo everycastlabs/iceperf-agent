@@ -1,8 +1,10 @@
 package config
 
 import (
+	"log/slog"
+
 	"github.com/pion/webrtc/v4"
-	"github.com/sirupsen/logrus"
+	"github.com/prometheus/client_golang/prometheus"
 	"gopkg.in/yaml.v3"
 )
 
@@ -33,9 +35,22 @@ type LokiConfig struct {
 	AuthHeaders    map[string]string `yaml:"auth_headers,omitempty"`
 }
 
+type PromConfig struct {
+	Enabled     bool              `yaml:"enabled"`
+	URL         string            `yaml:"url"`
+	AuthHeaders map[string]string `yaml:"auth_headers,omitempty"`
+}
+
+type ApiConfig struct {
+	Enabled bool   `yaml:"enabled"`
+	URI     string `yaml:"uri"`
+}
+
 type LoggingConfig struct {
-	Level string     `yaml:"level"`
-	Loki  LokiConfig `yaml:"loki"`
+	Level      string     `yaml:"level"`
+	API        ApiConfig  `yaml:"api"`
+	Loki       LokiConfig `yaml:"loki"`
+	Prometheus PromConfig `yaml:"prometheus"`
 }
 
 type Config struct {
@@ -50,7 +65,8 @@ type Config struct {
 	// internal
 	ServiceName string `yaml:"-"`
 	NodeID      string // Do not provide, will be overwritten
-	Logger      *logrus.Entry
+	Logger      *slog.Logger
+	Registry    *prometheus.Registry
 }
 
 func NewConfig(confString string) (*Config, error) {

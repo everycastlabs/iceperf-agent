@@ -10,7 +10,7 @@ import (
 	"github.com/nimbleape/iceperf-agent/config"
 	"github.com/pion/stun/v2"
 	"github.com/pion/webrtc/v4"
-	log "github.com/sirupsen/logrus"
+	// log "github.com/sirupsen/logrus"
 )
 
 type Driver struct {
@@ -39,17 +39,17 @@ func (d *Driver) GetIceServers() (iceServers []webrtc.ICEServer, err error) {
 	req.Header.Add("Content-Type", "application/json")
 
 	if err != nil {
-		log.WithFields(log.Fields{
-			"error": err,
-		}).Error("Error forming http request")
+		// log.WithFields(log.Fields{
+		// 	"error": err,
+		// }).Error("Error forming http request")
 		return nil, err
 	}
 
 	res, err := client.Do(req)
 	if err != nil {
-		log.WithFields(log.Fields{
-			"error": err,
-		}).Error("Error doing http response")
+		// log.WithFields(log.Fields{
+		// 	"error": err,
+		// }).Error("Error doing http response")
 		return nil, err
 	}
 
@@ -57,23 +57,31 @@ func (d *Driver) GetIceServers() (iceServers []webrtc.ICEServer, err error) {
 	//check the code of the response
 	if res.StatusCode != 200 {
 		err = errors.New("error from xirsys api")
-		log.WithFields(log.Fields{
-			"error":  err,
-			"status": res.StatusCode,
-		}).Error("Error status code http response")
+		// log.WithFields(log.Fields{
+		// 	"error":  err,
+		// 	"status": res.StatusCode,
+		// }).Error("Error status code http response")
 		return nil, err
 	}
 
 	responseData, err := io.ReadAll(res.Body)
 	if err != nil {
-		log.WithFields(log.Fields{
-			"error": err,
-		}).Error("Error reading http response")
+		// log.WithFields(log.Fields{
+		// 	"error": err,
+		// }).Error("Error reading http response")
 		return nil, err
 	}
 
 	responseServers := XirsysResponse{}
 	json.Unmarshal([]byte(responseData), &responseServers)
+
+	gotTransports := make(map[string]bool)
+
+	gotTransports[stun.SchemeTypeSTUN.String()+stun.ProtoTypeUDP.String()] = false
+	gotTransports[stun.SchemeTypeSTUN.String()+stun.ProtoTypeTCP.String()] = false
+	gotTransports[stun.SchemeTypeTURN.String()+stun.ProtoTypeUDP.String()] = false
+	gotTransports[stun.SchemeTypeTURN.String()+stun.ProtoTypeTCP.String()] = false
+	gotTransports[stun.SchemeTypeTURNS.String()+stun.ProtoTypeTCP.String()] = false
 
 	for _, r := range responseServers.V.IceServers.URLs {
 
@@ -84,6 +92,11 @@ func (d *Driver) GetIceServers() (iceServers []webrtc.ICEServer, err error) {
 		}
 
 		if ((info.Scheme == stun.SchemeTypeTURN || info.Scheme == stun.SchemeTypeTURNS) && !d.Config.TurnEnabled) || ((info.Scheme == stun.SchemeTypeSTUN || info.Scheme == stun.SchemeTypeSTUNS) && !d.Config.StunEnabled) {
+			continue
+		}
+
+		if gotTransports[info.Scheme.String()+info.Proto.String()] {
+			//we don't want to test all the special ports right now
 			continue
 		}
 
@@ -98,6 +111,7 @@ func (d *Driver) GetIceServers() (iceServers []webrtc.ICEServer, err error) {
 			s.Credential = responseServers.V.IceServers.Credential
 		}
 		iceServers = append(iceServers, s)
+		gotTransports[info.Scheme.String()+info.Proto.String()] = true
 	}
 
 	return iceServers, nil
