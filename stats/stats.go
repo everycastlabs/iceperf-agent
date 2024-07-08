@@ -2,6 +2,7 @@ package stats
 
 import (
 	"encoding/json"
+	"time"
 )
 
 // Stats represents a statistics object
@@ -18,14 +19,16 @@ type Stats struct {
 	LatencyFirstPacket                     float64           `json:"latencyFirstPacket"`
 	Throughput                             map[int64]float64 `json:"throughput"`
 	ThroughputMax                          float64           `json:"throughputMax"`
+	TestRunStartedAt                       time.Time         `json:"testRunStartedAt"`
 }
 
 // NewStats creates a new Stats object with a given test run ID
-func NewStats(testRunID string, labels map[string]string) *Stats {
+func NewStats(testRunID string, labels map[string]string, testRunStartedAt time.Time) *Stats {
 	return &Stats{
-		TestRunID:  testRunID,
-		Labels:     labels,
-		Throughput: make(map[int64]float64), // Initialize the Throughput map
+		TestRunID:        testRunID,
+		TestRunStartedAt: testRunStartedAt,
+		Labels:           labels,
+		Throughput:       make(map[int64]float64), // Initialize the Throughput map
 	}
 }
 

@@ -58,6 +58,7 @@ func runService(ctx *cli.Context) error {
 	}
 
 	testRunId := xid.New()
+	testRunStartedAt := time.Now()
 
 	lvl := new(slog.LevelVar)
 	lvl.Set(slog.LevelInfo)
@@ -224,7 +225,7 @@ func runService(ctx *cli.Context) error {
 			}
 
 			timer := time.NewTimer(testDuration)
-			c, err := client.NewClient(config, iceServerInfo, provider, testRunId)
+			c, err := client.NewClient(config, iceServerInfo, provider, testRunId, testRunStartedAt)
 			if err != nil {
 				return err
 			}

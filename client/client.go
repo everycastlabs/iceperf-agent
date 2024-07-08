@@ -44,11 +44,11 @@ type Client struct {
 	config            *config.Config
 }
 
-func NewClient(config *config.Config, iceServerInfo *stun.URI, provider string, testRunId xid.ID) (c *Client, err error) {
-	return newClient(config, iceServerInfo, provider, testRunId)
+func NewClient(config *config.Config, iceServerInfo *stun.URI, provider string, testRunId xid.ID, testRunStartedAt time.Time) (c *Client, err error) {
+	return newClient(config, iceServerInfo, provider, testRunId, testRunStartedAt)
 }
 
-func newClient(cc *config.Config, iceServerInfo *stun.URI, provider string, testRunId xid.ID) (*Client, error) {
+func newClient(cc *config.Config, iceServerInfo *stun.URI, provider string, testRunId xid.ID, testRunStartedAt time.Time) (*Client, error) {
 
 	// Start timers
 	startTime = time.Now()
@@ -58,7 +58,8 @@ func newClient(cc *config.Config, iceServerInfo *stun.URI, provider string, test
 		"scheme":   iceServerInfo.Scheme.String(),
 		"protocol": iceServerInfo.Proto.String(),
 		"port":     fmt.Sprintf("%d", iceServerInfo.Port),
-	})
+		"location": cc.LocationID,
+	}, testRunStartedAt)
 
 	connectionPair, err := newConnectionPair(cc, iceServerInfo, provider, stats)
 

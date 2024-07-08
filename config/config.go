@@ -54,8 +54,9 @@ type LoggingConfig struct {
 }
 
 type Config struct {
-	ICEConfig map[string]ICEConfig `yaml:"ice_servers"`
-	Logging   LoggingConfig        `yaml:"logging"`
+	LocationID string               `yaml:"location_id"`
+	ICEConfig  map[string]ICEConfig `yaml:"ice_servers"`
+	Logging    LoggingConfig        `yaml:"logging"`
 
 	WebRTCConfig webrtc.Configuration
 	// TODO the following should be different for answerer and offerer sides
