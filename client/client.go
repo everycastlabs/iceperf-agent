@@ -282,7 +282,7 @@ func (c *Client) Stop() error {
 		}
 	}
 	j, _ := c.stats.ToJSON()
-	c.Logger.Info("Individual Test Run Completed", "data", j)
+	c.Logger.Info(j, "individual_test_completed", "true")
 
 	return nil
 }
