@@ -44,6 +44,7 @@ type PromConfig struct {
 type ApiConfig struct {
 	Enabled bool   `yaml:"enabled"`
 	URI     string `yaml:"uri"`
+	ApiKey  string `yaml:"api_key,omitempty"`
 }
 
 type LoggingConfig struct {

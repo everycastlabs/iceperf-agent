@@ -264,6 +264,7 @@ func (c *Client) Stop() error {
 
 		// Set the appropriate headers
 		req.Header.Set("Content-Type", "application/json")
+		req.Header.Add("Authorization", "Bearer "+c.config.Logging.API.ApiKey)
 
 		// Send the request using the HTTP client
 		client := &http.Client{}
