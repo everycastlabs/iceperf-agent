@@ -118,19 +118,21 @@ func (d *Driver) GetIceServers() (iceServers []webrtc.ICEServer, err error) {
 		gotTransports[info.Scheme.String()+info.Proto.String()] = true
 	}
 
-	//apparently if you go and make a tls turn uri it will work
-	s := webrtc.ICEServer{
-		URLs: []string{"turns:" + tempTurnHost + ":5349?transport=tcp"},
-	}
+	if d.Config.TurnEnabled {
+		//apparently if you go and make a tls turn uri it will work
+		s := webrtc.ICEServer{
+			URLs: []string{"turns:" + tempTurnHost + ":5349?transport=tcp"},
+		}
 
-	if responseServers.Username != "" {
-		s.Username = responseServers.Username
-	}
-	if responseServers.Password != "" {
-		s.Credential = responseServers.Password
-	}
+		if responseServers.Username != "" {
+			s.Username = responseServers.Username
+		}
+		if responseServers.Password != "" {
+			s.Credential = responseServers.Password
+		}
 
-	iceServers = append(iceServers, s)
+		iceServers = append(iceServers, s)
+	}
 
 	return iceServers, nil
 }
