@@ -354,7 +354,7 @@ func runService(ctx *cli.Context) error {
 	// 	logger.Info("Wrote stats to prom")
 
 	// }
-	if !config.Logging.Loki.Enabled {
+	if !config.Logging.Loki.Enabled && !config.Logging.API.Enabled {
 		headerFmt := color.New(color.FgGreen, color.Underline).SprintfFunc()
 		columnFmt := color.New(color.FgYellow).SprintfFunc()
 
