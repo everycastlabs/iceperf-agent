@@ -358,11 +358,11 @@ func runService(ctx *cli.Context) error {
 		headerFmt := color.New(color.FgGreen, color.Underline).SprintfFunc()
 		columnFmt := color.New(color.FgYellow).SprintfFunc()
 
-		tbl := table.New("Provider", "Scheme", "Time to candidate", "Max Throughput")
+		tbl := table.New("Provider", "Scheme", "Time to candidate", "Max Throughput", "TURN Transfer Latency")
 		tbl.WithHeaderFormatter(headerFmt).WithFirstColumnFormatter(columnFmt)
 
 		for _, st := range results {
-			tbl.AddRow(st.Provider, st.Scheme, st.OffererTimeToReceiveCandidate, st.ThroughputMax)
+			tbl.AddRow(st.Provider, st.Scheme, st.OffererTimeToReceiveCandidate, st.ThroughputMax, st.LatencyFirstPacket)
 		}
 
 		tbl.Print()
