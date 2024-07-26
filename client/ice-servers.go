@@ -1,6 +1,9 @@
 package client
 
 import (
+	"log/slog"
+
+	"github.com/nimbleape/iceperf-agent/adapters/api"
 	"github.com/nimbleape/iceperf-agent/adapters/cloudflare"
 	"github.com/nimbleape/iceperf-agent/adapters/elixir"
 	"github.com/nimbleape/iceperf-agent/adapters/expressturn"
@@ -17,8 +20,17 @@ func formGenericIceServers(config *config.ICEConfig) (iceServers []webrtc.ICESer
 	return nil, nil
 }
 
-func GetIceServers(config *config.Config) (iceServers map[string][]webrtc.ICEServer, err error) {
+func GetIceServers(config *config.Config, logger *slog.Logger) (iceServers map[string][]webrtc.ICEServer, location string, err error) {
 	iceServers = make(map[string][]webrtc.ICEServer)
+
+	//check if the API is set and is enabled
+	if apiConfig, ok := config.ICEConfig["api"]; ok && apiConfig.Enabled {
+		md := api.Driver{
+			Config: &apiConfig,
+		}
+		iceServers, location, err = md.GetIceServers()
+		return
+	}
 
 	//loop through
 	for key, conf := range config.ICEConfig {
@@ -32,10 +44,8 @@ func GetIceServers(config *config.Config) (iceServers map[string][]webrtc.ICESer
 			}
 			is, err := md.GetIceServers()
 			if err != nil {
-				// log.WithFields(log.Fields{
-				// 	"error": err,
-				// }).Error("Error getting elixir ice servers")
-				return nil, err
+				logger.Error("Error getting elixir ice servers")
+				return nil, "", err
 			}
 			iceServers[key] = is
 		case "google":
@@ -47,10 +57,8 @@ func GetIceServers(config *config.Config) (iceServers map[string][]webrtc.ICESer
 			}
 			is, err := md.GetIceServers()
 			if err != nil {
-				// log.WithFields(log.Fields{
-				// 	"error": err,
-				// }).Error("Error getting google ice servers")
-				return nil, err
+				logger.Error("Error getting google ice servers")
+				return nil, "", err
 			}
 			iceServers[key] = is
 		case "metered":
@@ -62,10 +70,8 @@ func GetIceServers(config *config.Config) (iceServers map[string][]webrtc.ICESer
 			}
 			is, err := md.GetIceServers()
 			if err != nil {
-				// log.WithFields(log.Fields{
-				// 	"error": err,
-				// }).Error("Error getting metered ice servers")
-				return nil, err
+				logger.Error("Error getting metered ice servers")
+				return nil, "", err
 			}
 			iceServers[key] = is
 		case "twilio":
@@ -77,10 +83,8 @@ func GetIceServers(config *config.Config) (iceServers map[string][]webrtc.ICESer
 			}
 			is, err := td.GetIceServers()
 			if err != nil {
-				// log.WithFields(log.Fields{
-				// 	"error": err,
-				// }).Error("Error getting twilio ice servers")
-				return nil, err
+				logger.Error("Error getting twilio ice servers")
+				return nil, "", err
 			}
 			iceServers[key] = is
 		case "xirsys":
@@ -92,10 +96,8 @@ func GetIceServers(config *config.Config) (iceServers map[string][]webrtc.ICESer
 			}
 			is, err := xd.GetIceServers()
 			if err != nil {
-				// log.WithFields(log.Fields{
-				// 	"error": err,
-				// }).Error("Error getting xirsys ice servers")
-				return nil, err
+				logger.Error("Error getting xirsys ice servers")
+				return nil, "", err
 			}
 			iceServers[key] = is
 		case "cloudflare":
@@ -107,10 +109,8 @@ func GetIceServers(config *config.Config) (iceServers map[string][]webrtc.ICESer
 			}
 			is, err := cd.GetIceServers()
 			if err != nil {
-				// log.WithFields(log.Fields{
-				// 	"error": err,
-				// }).Error("Error getting Cloudflare ice servers")
-				return nil, err
+				logger.Error("Error getting cloudflare ice servers")
+				return nil, "", err
 			}
 			iceServers[key] = is
 		case "expressturn":
@@ -122,19 +122,16 @@ func GetIceServers(config *config.Config) (iceServers map[string][]webrtc.ICESer
 			}
 			is, err := ed.GetIceServers()
 			if err != nil {
-				// log.WithFields(log.Fields{
-				// 	"error": err,
-				// }).Error("Error getting Expressturn ice servers")
-				return nil, err
+				logger.Error("Error getting expressturn ice servers")
+
+				return nil, "", err
 			}
 			iceServers[key] = is
 		default:
 			is, err := formGenericIceServers(&conf)
 			if err != nil {
-				// log.WithFields(log.Fields{
-				// 	"error": err,
-				// }).Error("Error constructing ice servers")
-				return nil, err
+				logger.Error("Error getting generic ice servers")
+				return nil, "", err
 			}
 			iceServers[key] = is
 		}

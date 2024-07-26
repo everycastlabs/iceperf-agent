@@ -40,7 +40,7 @@ type Client struct {
 	close             chan struct{}
 	Logger            *slog.Logger
 	provider          string
-	stats             *stats.Stats
+	Stats             *stats.Stats
 	config            *config.Config
 }
 
@@ -53,13 +53,13 @@ func newClient(cc *config.Config, iceServerInfo *stun.URI, provider string, test
 	// Start timers
 	startTime = time.Now()
 
-	stats := stats.NewStats(testRunId.String(), map[string]string{
-		"provider": provider,
-		"scheme":   iceServerInfo.Scheme.String(),
-		"protocol": iceServerInfo.Proto.String(),
-		"port":     fmt.Sprintf("%d", iceServerInfo.Port),
-		"location": cc.LocationID,
-	}, testRunStartedAt)
+	stats := stats.NewStats(testRunId.String(), testRunStartedAt)
+
+	stats.SetProvider(provider)
+	stats.SetScheme(iceServerInfo.Scheme.String())
+	stats.SetProtocol(iceServerInfo.Proto.String())
+	stats.SetPort(fmt.Sprintf("%d", iceServerInfo.Port))
+	stats.SetLocation(cc.LocationID)
 
 	connectionPair, err := newConnectionPair(cc, iceServerInfo, provider, stats)
 
@@ -74,7 +74,7 @@ func newClient(cc *config.Config, iceServerInfo *stun.URI, provider string, test
 		close:             make(chan struct{}),
 		Logger:            cc.Logger,
 		provider:          provider,
-		stats:             stats,
+		Stats:             stats,
 		config:            cc,
 	}
 
@@ -246,7 +246,7 @@ func (c *Client) Stop() error {
 
 	if c.config.Logging.API.Enabled {
 		// Convert data to JSON
-		jsonData, err := json.Marshal(c.stats)
+		jsonData, err := json.Marshal(c.Stats)
 		if err != nil {
 			fmt.Println("Error marshalling JSON:", err)
 			return err
@@ -281,7 +281,7 @@ func (c *Client) Stop() error {
 			fmt.Printf("Failed to send data. Status code: %d\n", resp.StatusCode)
 		}
 	}
-	j, _ := c.stats.ToJSON()
+	j, _ := c.Stats.ToJSON()
 	c.Logger.Info(j, "individual_test_completed", "true")
 
 	return nil

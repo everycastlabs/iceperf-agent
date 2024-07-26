@@ -5,12 +5,14 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"time"
 
 	"github.com/nimbleape/iceperf-agent/client"
 	"github.com/nimbleape/iceperf-agent/config"
+	"github.com/nimbleape/iceperf-agent/stats"
 	"github.com/nimbleape/iceperf-agent/version"
 	"github.com/pion/stun/v2"
 	"github.com/pion/webrtc/v4"
@@ -27,6 +29,9 @@ import (
 
 	// "github.com/grafana/loki-client-go/loki"
 	loki "github.com/magnetde/slog-loki"
+
+	"github.com/fatih/color"
+	"github.com/rodaine/table"
 )
 
 func main() {
@@ -67,22 +72,45 @@ func runService(ctx *cli.Context) error {
 
 	var logg *slog.Logger
 
+	var loggingLevel slog.Level
+
+	switch config.Logging.Level {
+	case "debug":
+		loggingLevel = slog.LevelDebug
+	case "info":
+		loggingLevel = slog.LevelInfo
+	case "error":
+		loggingLevel = slog.LevelError
+	default:
+		loggingLevel = slog.LevelInfo
+	}
+
 	if config.Logging.Loki.Enabled {
 
 		// config, _ := loki.NewDefaultConfig(config.Logging.Loki.URL)
 		// // config.TenantID = "xyz"
 		// client, _ := loki.New(config)
 
-		lokiHandler := loki.NewHandler(config.Logging.Loki.URL, loki.WithLabelsEnabled(loki.LabelAll...))
+		lokiHandler := loki.NewHandler(
+			config.Logging.Loki.URL,
+			loki.WithLabelsEnabled(loki.LabelAll...),
+			loki.WithHandler(func(w io.Writer) slog.Handler {
+				return slog.NewJSONHandler(w, &slog.HandlerOptions{
+					Level: loggingLevel,
+				})
+			}))
 
 		logg = slog.New(
 			slogmulti.Fanout(
 				slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
-					Level: slog.LevelInfo,
+					Level: loggingLevel,
 				}),
+				// slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{
+				// 	Level: slog.LevelInfo,
+				// }),
 				lokiHandler,
 			),
-		).With("app", "iceperftest")
+		).With("app", "iceperf")
 
 		// stop loki client and purge buffers
 		defer lokiHandler.Close()
@@ -139,11 +167,11 @@ func runService(ctx *cli.Context) error {
 		// log.AddHook(hook)
 	} else {
 		handlerOpts := &slog.HandlerOptions{
-			Level: slog.LevelInfo,
+			Level: loggingLevel,
 		}
 		logg = slog.New(slog.NewTextHandler(os.Stderr, handlerOpts))
 	}
-	// slog.SetDefault(logg)
+	slog.SetDefault(logg)
 
 	// logg.SetFormatter(&log.JSONFormatter{PrettyPrint: true})
 
@@ -151,10 +179,14 @@ func runService(ctx *cli.Context) error {
 
 	// TODO we will make a new client for each ICE Server URL from each provider
 	// get ICE servers and loop them
-	ICEServers, err := client.GetIceServers(config)
+	ICEServers, location, err := client.GetIceServers(config, logger)
 	if err != nil {
-		logger.Error("Error getting ICE servers")
+		logger.Error("Error getting ICE servers", "err", err)
 		//this should be a fatal
+	}
+
+	if location != "" {
+		config.LocationID = location
 	}
 
 	config.Registry = prometheus.NewRegistry()
@@ -188,17 +220,19 @@ func runService(ctx *cli.Context) error {
 	// }
 	// end TEST
 
+	var results []*stats.Stats
+
 	for provider, iss := range ICEServers {
 		providerLogger := logger.With("Provider", provider)
 
 		providerLogger.Info("Provider Starting")
 
 		for _, is := range iss {
-
 			iceServerInfo, err := stun.ParseURI(is.URLs[0])
 
 			if err != nil {
-				return err
+				providerLogger.Error("Error parsing ICE Server URL", "err", err)
+				continue
 			}
 
 			runId := xid.New()
@@ -238,9 +272,11 @@ func runService(ctx *cli.Context) error {
 			c.Stop()
 			<-time.After(1 * time.Second)
 			iceServerLogger.Info("Finished")
+			results = append(results, c.Stats)
 		}
 		providerLogger.Info("Provider Finished")
 	}
+
 	logger.Info("Finished Test Run")
 
 	// c, err := client.NewClient(config)
@@ -318,6 +354,19 @@ func runService(ctx *cli.Context) error {
 	// 	logger.Info("Wrote stats to prom")
 
 	// }
+	if !config.Logging.Loki.Enabled {
+		headerFmt := color.New(color.FgGreen, color.Underline).SprintfFunc()
+		columnFmt := color.New(color.FgYellow).SprintfFunc()
+
+		tbl := table.New("Provider", "Scheme", "Time to candidate", "Max Throughput")
+		tbl.WithHeaderFormatter(headerFmt).WithFirstColumnFormatter(columnFmt)
+
+		for _, st := range results {
+			tbl.AddRow(st.Provider, st.Scheme, st.OffererTimeToReceiveCandidate, st.ThroughputMax)
+		}
+
+		tbl.Print()
+	}
 
 	return nil
 }
