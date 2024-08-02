@@ -179,14 +179,14 @@ func runService(ctx *cli.Context) error {
 
 	// TODO we will make a new client for each ICE Server URL from each provider
 	// get ICE servers and loop them
-	ICEServers, location, err := client.GetIceServers(config, logger)
+	ICEServers, node, err := client.GetIceServers(config, logger, testRunId)
 	if err != nil {
 		logger.Error("Error getting ICE servers", "err", err)
 		//this should be a fatal
 	}
 
-	if location != "" {
-		config.LocationID = location
+	if node != "" {
+		config.NodeID = node
 	}
 
 	config.Registry = prometheus.NewRegistry()
@@ -227,7 +227,10 @@ func runService(ctx *cli.Context) error {
 
 		providerLogger.Info("Provider Starting")
 
-		for _, is := range iss {
+		for _, is := range iss.IceServers {
+
+			providerLogger.Info("URL is", "url", is)
+
 			iceServerInfo, err := stun.ParseURI(is.URLs[0])
 
 			if err != nil {
@@ -259,7 +262,9 @@ func runService(ctx *cli.Context) error {
 			}
 
 			timer := time.NewTimer(testDuration)
-			c, err := client.NewClient(config, iceServerInfo, provider, testRunId, testRunStartedAt)
+			close := make(chan struct{})
+
+			c, err := client.NewClient(config, iceServerInfo, provider, testRunId, testRunStartedAt, iss.DoThroughput, close)
 			if err != nil {
 				return err
 			}
@@ -267,7 +272,11 @@ func runService(ctx *cli.Context) error {
 			iceServerLogger.Info("Calling Run()")
 			c.Run()
 			iceServerLogger.Info("Called Run(), waiting for timer", "seconds", testDuration.Seconds())
-			<-timer.C
+			select {
+			case <-close:
+				timer.Stop()
+			case <-timer.C:
+			}
 			iceServerLogger.Info("Calling Stop()")
 			c.Stop()
 			<-time.After(1 * time.Second)

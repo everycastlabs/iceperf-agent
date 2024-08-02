@@ -23,6 +23,7 @@ type ICEConfig struct {
 	StunPorts    map[string][]int `yaml:"stun_ports,omitempty"`
 	StunEnabled  bool             `yaml:"stun_enabled"`
 	TurnEnabled  bool             `yaml:"turn_enabled"`
+	DoThroughput bool             `yaml:"do_throughput"`
 }
 
 type LokiConfig struct {
@@ -55,9 +56,9 @@ type LoggingConfig struct {
 }
 
 type Config struct {
-	LocationID string               `yaml:"location_id"`
-	ICEConfig  map[string]ICEConfig `yaml:"ice_servers"`
-	Logging    LoggingConfig        `yaml:"logging"`
+	NodeID    string               `yaml:"node_id"`
+	ICEConfig map[string]ICEConfig `yaml:"ice_servers"`
+	Logging   LoggingConfig        `yaml:"logging"`
 
 	WebRTCConfig webrtc.Configuration
 	// TODO the following should be different for answerer and offerer sides
@@ -66,7 +67,6 @@ type Config struct {
 
 	// internal
 	ServiceName string `yaml:"-"`
-	NodeID      string // Do not provide, will be overwritten
 	Logger      *slog.Logger
 	Registry    *prometheus.Registry
 }

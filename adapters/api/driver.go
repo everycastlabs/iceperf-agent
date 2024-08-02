@@ -4,32 +4,44 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"log/slog"
 	"net/http"
+	"strings"
 
+	"github.com/nimbleape/iceperf-agent/adapters"
 	"github.com/nimbleape/iceperf-agent/config"
 	"github.com/pion/webrtc/v4"
+	"github.com/rs/xid"
 )
 
 type Driver struct {
 	Config *config.ICEConfig
+	Logger *slog.Logger
 }
 
 type ApiIceServer struct {
-	URL        string `json:"url,omitempty"`
-	Username   string `json:"username,omitempty"`
-	Credential string `json:"credential,omitempty"`
-}
-type ApiResponse struct {
-	Providers map[string][]ApiIceServer `json:"providers"`
-	Location  string                    `json:"location"`
+	URLs       []string `json:"urls,omitempty"`
+	Username   string   `json:"username,omitempty"`
+	Credential string   `json:"credential,omitempty"`
 }
 
-func (d *Driver) GetIceServers() (providersAndIceServers map[string][]webrtc.ICEServer, location string, err error) {
+type ProviderRes struct {
+	IceServers   []ApiIceServer `json:"iceServers"`
+	DoThroughput bool           `json:"doThroughput"`
+}
+type ApiResponse struct {
+	Providers map[string]ProviderRes `json:"providers"`
+	Node      string                 `json:"node"`
+}
+
+func (d *Driver) GetIceServers(testRunId xid.ID) (map[string]adapters.IceServersConfig, string, error) {
+	providersAndIceServers := make(map[string]adapters.IceServersConfig)
+
 	if d.Config.RequestUrl != "" {
 
 		client := &http.Client{}
 
-		req, err := http.NewRequest("POST", d.Config.RequestUrl, nil)
+		req, err := http.NewRequest("POST", d.Config.RequestUrl, strings.NewReader(`{"testRunID": "`+testRunId.String()+`"}`))
 		req.Header.Add("Content-Type", "application/json")
 		req.Header.Add("Authorization", "Bearer "+d.Config.ApiKey)
 
@@ -37,7 +49,7 @@ func (d *Driver) GetIceServers() (providersAndIceServers map[string][]webrtc.ICE
 			// log.WithFields(log.Fields{
 			// 	"error": err,
 			// }).Error("Error forming http request")
-			return nil, "", err
+			return providersAndIceServers, "", err
 		}
 
 		res, err := client.Do(req)
@@ -45,18 +57,14 @@ func (d *Driver) GetIceServers() (providersAndIceServers map[string][]webrtc.ICE
 			// log.WithFields(log.Fields{
 			// 	"error": err,
 			// }).Error("Error doing http response")
-			return nil, "", err
+			return providersAndIceServers, "", err
 		}
 
 		defer res.Body.Close()
 		//check the code of the response
-		if res.StatusCode != 201 {
+		if res.StatusCode != 200 {
 			err = errors.New("error from our api")
-			// log.WithFields(log.Fields{
-			// 	"code": res.StatusCode,
-			// 	"error": err,
-			// }).Error("Error status code http response")
-			return nil, "", err
+			return providersAndIceServers, "", err
 		}
 
 		responseData, err := io.ReadAll(res.Body)
@@ -64,7 +72,7 @@ func (d *Driver) GetIceServers() (providersAndIceServers map[string][]webrtc.ICE
 			// log.WithFields(log.Fields{
 			// 	"error": err,
 			// }).Error("Error reading http response")
-			return nil, "", err
+			return providersAndIceServers, "", err
 		}
 		// log.Info("got a response back from cloudflare api")
 
@@ -75,14 +83,15 @@ func (d *Driver) GetIceServers() (providersAndIceServers map[string][]webrtc.ICE
 		// 	"response": responseServers,
 		// }).Info("http response")
 
-		location = responseServers.Location
+		node := responseServers.Node
 
 		for k, q := range responseServers.Providers {
+
 			iceServers := []webrtc.ICEServer{}
-			for _, r := range q {
+			for _, r := range q.IceServers {
 
 				s := webrtc.ICEServer{
-					URLs: []string{r.URL},
+					URLs: r.URLs,
 				}
 
 				if r.Username != "" {
@@ -93,8 +102,12 @@ func (d *Driver) GetIceServers() (providersAndIceServers map[string][]webrtc.ICE
 				}
 				iceServers = append(iceServers, s)
 			}
-			providersAndIceServers[k] = iceServers
+			providersAndIceServers[k] = adapters.IceServersConfig{
+				DoThroughput: q.DoThroughput,
+				IceServers:   iceServers,
+			}
 		}
+		return providersAndIceServers, node, nil
 	}
-	return
+	return providersAndIceServers, "", nil
 }

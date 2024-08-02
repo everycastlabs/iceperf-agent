@@ -4,8 +4,10 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"log/slog"
 	"net/http"
 
+	"github.com/nimbleape/iceperf-agent/adapters"
 	"github.com/nimbleape/iceperf-agent/config"
 	"github.com/pion/stun/v2"
 	"github.com/pion/webrtc/v4"
@@ -14,6 +16,7 @@ import (
 
 type Driver struct {
 	Config *config.ICEConfig
+	Logger *slog.Logger
 }
 
 type TwilioIceServers struct {
@@ -31,8 +34,12 @@ type TwilioResponse struct {
 	IceServers  []TwilioIceServers `json:"ice_servers"`
 }
 
-func (d *Driver) GetIceServers() (iceServers []webrtc.ICEServer, err error) {
+func (d *Driver) GetIceServers() (adapters.IceServersConfig, error) {
 	client := &http.Client{}
+
+	iceServers := adapters.IceServersConfig{
+		IceServers: []webrtc.ICEServer{},
+	}
 
 	req, err := http.NewRequest("POST", d.Config.RequestUrl, nil)
 	req.SetBasicAuth(d.Config.HttpUsername, d.Config.HttpPassword)
@@ -41,7 +48,7 @@ func (d *Driver) GetIceServers() (iceServers []webrtc.ICEServer, err error) {
 		// log.WithFields(log.Fields{
 		// 	"error": err,
 		// }).Error("Error forming http request")
-		return nil, err
+		return iceServers, err
 	}
 
 	res, err := client.Do(req)
@@ -49,7 +56,7 @@ func (d *Driver) GetIceServers() (iceServers []webrtc.ICEServer, err error) {
 		// log.WithFields(log.Fields{
 		// 	"error": err,
 		// }).Error("Error doing http response")
-		return nil, err
+		return iceServers, err
 	}
 
 	defer res.Body.Close()
@@ -59,7 +66,7 @@ func (d *Driver) GetIceServers() (iceServers []webrtc.ICEServer, err error) {
 		// log.WithFields(log.Fields{
 		// 	"error": err,
 		// }).Error("Error status code http response")
-		return nil, err
+		return iceServers, err
 	}
 
 	responseData, err := io.ReadAll(res.Body)
@@ -67,7 +74,7 @@ func (d *Driver) GetIceServers() (iceServers []webrtc.ICEServer, err error) {
 		// log.WithFields(log.Fields{
 		// 	"error": err,
 		// }).Error("Error reading http response")
-		return nil, err
+		return iceServers, err
 	}
 
 	responseServers := TwilioResponse{}
@@ -88,7 +95,7 @@ func (d *Driver) GetIceServers() (iceServers []webrtc.ICEServer, err error) {
 		info, err := stun.ParseURI(r.URL)
 
 		if err != nil {
-			return nil, err
+			return iceServers, err
 		}
 
 		if ((info.Scheme == stun.SchemeTypeTURN || info.Scheme == stun.SchemeTypeTURNS) && !d.Config.TurnEnabled) || ((info.Scheme == stun.SchemeTypeSTUN || info.Scheme == stun.SchemeTypeSTUNS) && !d.Config.StunEnabled) {
@@ -114,7 +121,7 @@ func (d *Driver) GetIceServers() (iceServers []webrtc.ICEServer, err error) {
 		if r.Credential != "" {
 			s.Credential = r.Credential
 		}
-		iceServers = append(iceServers, s)
+		iceServers.IceServers = append(iceServers.IceServers, s)
 		gotTransports[info.Scheme.String()+info.Proto.String()] = true
 	}
 
@@ -131,7 +138,7 @@ func (d *Driver) GetIceServers() (iceServers []webrtc.ICEServer, err error) {
 			s.Credential = responseServers.Password
 		}
 
-		iceServers = append(iceServers, s)
+		iceServers.IceServers = append(iceServers.IceServers, s)
 	}
 
 	return iceServers, nil

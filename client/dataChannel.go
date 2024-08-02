@@ -31,24 +31,27 @@ type ConnectionPair struct {
 	iceServerInfo           *stun.URI
 	provider                string
 	stats                   *stats.Stats
+	doThroughputTest        bool
+	closeChan               chan struct{}
 }
 
-func NewConnectionPair(config *config.Config, iceServerInfo *stun.URI, provider string, stats *stats.Stats) (c *ConnectionPair, err error) {
-	return newConnectionPair(config, iceServerInfo, provider, stats)
+func NewConnectionPair(config *config.Config, iceServerInfo *stun.URI, provider string, stats *stats.Stats, doThroughputTest bool, closeChan chan struct{}) (c *ConnectionPair, err error) {
+	return newConnectionPair(config, iceServerInfo, provider, stats, doThroughputTest, closeChan)
 }
 
-func newConnectionPair(cc *config.Config, iceServerInfo *stun.URI, provider string, stats *stats.Stats) (*ConnectionPair, error) {
-
+func newConnectionPair(cc *config.Config, iceServerInfo *stun.URI, provider string, stats *stats.Stats, doThroughputTest bool, closeChan chan struct{}) (*ConnectionPair, error) {
 	logOfferer := cc.Logger.With("peer", "Offerer")
 	logAnswerer := cc.Logger.With("peer", "Answerer")
 
 	cp := &ConnectionPair{
-		config:        cc,
-		LogOfferer:    logOfferer,
-		LogAnswerer:   logAnswerer,
-		iceServerInfo: iceServerInfo,
-		provider:      provider,
-		stats:         stats,
+		config:           cc,
+		LogOfferer:       logOfferer,
+		LogAnswerer:      logAnswerer,
+		iceServerInfo:    iceServerInfo,
+		provider:         provider,
+		stats:            stats,
+		doThroughputTest: doThroughputTest,
+		closeChan:        closeChan,
 	}
 
 	config := webrtc.Configuration{}
@@ -89,7 +92,11 @@ func (cp *ConnectionPair) setRemoteDescription(pc *webrtc.PeerConnection, sdp []
 
 func (cp *ConnectionPair) createOfferer(config webrtc.Configuration) {
 	// Create a new PeerConnection
-	pc, err := webrtc.NewPeerConnection(config)
+	settingEngine := webrtc.SettingEngine{}
+	settingEngine.SetICETimeouts(5*time.Second, 10*time.Second, 2*time.Second)
+	api := webrtc.NewAPI(webrtc.WithSettingEngine(settingEngine))
+
+	pc, err := api.NewPeerConnection(config)
 	util.Check(err)
 
 	buf := make([]byte, 1024)
@@ -158,9 +165,13 @@ func (cp *ConnectionPair) createOfferer(config webrtc.Configuration) {
 		dc.OnBufferedAmountLow(func() {
 			// Make sure to not block this channel or perform long running operations in this callback
 			// This callback is executed by pion/sctp. If this callback is blocking it will stop operations
-			select {
-			case sendMoreCh <- struct{}{}:
-			default:
+			if cp.doThroughputTest {
+				select {
+				case sendMoreCh <- struct{}{}:
+				default:
+				}
+			} else {
+				//a noop
 			}
 		})
 
@@ -179,6 +190,10 @@ func (cp *ConnectionPair) createOfferer(config webrtc.Configuration) {
 }
 
 func (cp *ConnectionPair) createAnswerer(config webrtc.Configuration) {
+
+	// settingEngine := webrtc.SettingEngine{}
+	// settingEngine.SetICETimeouts(5, 5, 2)
+	// api := webrtc.NewAPI(webrtc.WithSettingEngine(settingEngine))
 	// Create a new PeerConnection
 	pc, err := webrtc.NewPeerConnection(config)
 	util.Check(err)
@@ -215,15 +230,18 @@ func (cp *ConnectionPair) createAnswerer(config webrtc.Configuration) {
 					// bps := float64(atomic.LoadUint64(&totalBytesReceived)*8) / time.Since(since).Seconds()
 					cp.LogAnswerer.Info("On ticker: Calculated throughput", "throughput", bps/1024/1024,
 						"eventTime", time.Now())
-
-					cp.stats.AddThroughput(time.Since(since).Milliseconds(), bps/1024/1024)
+					if cp.doThroughputTest {
+						cp.stats.AddThroughput(time.Since(since).Milliseconds(), bps/1024/1024)
+					}
 				}
 				bps := 8 * float64(totalBytesReceived) / float64(time.Since(since).Seconds())
 				// bps := float64(atomic.LoadUint64(&totalBytesReceived)*8) / time.Since(since).Seconds()
 				cp.LogAnswerer.Info("On ticker: Calculated throughput", "throughput", bps/1024/1024,
 					"eventTime", time.Now(),
 					"timeSinceStartMs", time.Since(since).Milliseconds())
-				cp.stats.AddThroughput(time.Since(since).Milliseconds(), bps/1024/1024)
+				if cp.doThroughputTest {
+					cp.stats.AddThroughput(time.Since(since).Milliseconds(), bps/1024/1024)
+				}
 			})
 
 			// Register the OnMessage to handle incoming messages
@@ -239,6 +257,10 @@ func (cp *ConnectionPair) createAnswerer(config webrtc.Configuration) {
 					totalBytesReceived = totalBytesReceivedTmp
 					// cp.LogAnswerer.Info("Received Bytes So Far", "dcReceivedBytes", totalBytesReceivedTmp,
 					// 	"cpReceivedBytes", cpTotalBytesReceivedTmp)
+				}
+				if !cp.doThroughputTest {
+					cp.LogAnswerer.Info("Sending to close")
+					cp.closeChan <- struct{}{}
 				}
 			})
 
