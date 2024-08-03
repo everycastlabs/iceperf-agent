@@ -7,6 +7,7 @@ on:
   push:
     branches:
       - "main"
+      - "add-updates"
     tags:
       - "v*.*.*"
   pull_request:
@@ -47,34 +48,40 @@ jobs:
     needs:
       - test
     concurrency:
-      group: ${{ github.workflow }}-${{ matrix.os }}-${{ github.ref }}
+      group: ${{ github.workflow }}-${{ matrix.goos }}-${{ github.ref }}
       cancel-in-progress: true
+    runs-on: ubuntu-latest
     strategy:
       matrix:
-        include:
-          - os: macos-latest-xlarge
-            binary-name: iceperf-darwin-arm64
-          - os: windows-latest
-            binary-name: iceperf-windows-x86-64
-          - os: ubuntu-latest
-            binary-name: iceperf-linux-x86-64
-    runs-on: ${{ matrix.os }}
+        # build and publish in parallel: linux/386, linux/amd64, linux/arm64, windows/386, windows/amd64, darwin/amd64, darwin/arm64
+        goos: [linux, windows, darwin]
+        goarch: [amd64, arm64]
+        exclude:
+          - goarch: arm64
+            goos: windows
     steps:
     - uses: actions/checkout@v4
 
-    - name: Set up Go
-      uses: actions/setup-go@v4
+    # - name: Set up Go
+    #   uses: actions/setup-go@v4
+    #   with:
+    #     go-version: '1.22.x'
+
+    # - name: Install dependencies
+    #   run: go get ./cmd/iceperf
+
+    - uses: wangyoucao577/go-release-action@v1
       with:
-        go-version: '1.22.x'
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        goos: ${{ matrix.goos }}
+        goarch: ${{ matrix.goarch }}
+        project_path: "./cmd/iceperf"
 
-    - name: Install dependencies
-      run: go get ./cmd/iceperf
+    # - name: Build
+    #   run: go build -o ${{ matrix.binary-name }} ./cmd/iceperf
 
-    - name: Build
-      run: go build -o ${{ matrix.binary-name }} ./cmd/iceperf
-
-    - name: Release
-      uses: softprops/action-gh-release@v2
-      if: startsWith(github.ref, 'refs/tags/')
-      with:
-        files: ${{ matrix.binary-name }}
+    # - name: Release
+    #   uses: softprops/action-gh-release@v2
+    #   if: startsWith(github.ref, 'refs/tags/')
+    #   with:
+    #     files: ${{ matrix.binary-name }}

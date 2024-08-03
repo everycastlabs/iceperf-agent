@@ -62,9 +62,6 @@ func runService(ctx *cli.Context) error {
 		return err
 	}
 
-	testRunId := xid.New()
-	testRunStartedAt := time.Now()
-
 	lvl := new(slog.LevelVar)
 	lvl.Set(slog.LevelInfo)
 
@@ -173,7 +170,25 @@ func runService(ctx *cli.Context) error {
 	}
 	slog.SetDefault(logg)
 
+	if config.Timer.Enabled {
+		ticker := time.NewTicker(time.Duration(config.Timer.Interval) * time.Second)
+		runTest(logg, config)
+		for {
+			<-ticker.C
+			runTest(logg, config)
+		}
+	} else {
+		runTest(logg, config)
+	}
+
+	return nil
+}
+
+func runTest(logg *slog.Logger, config *config.Config) error {
 	// logg.SetFormatter(&log.JSONFormatter{PrettyPrint: true})
+
+	testRunId := xid.New()
+	testRunStartedAt := time.Now()
 
 	logger := logg.With("testRunId", testRunId)
 
@@ -376,7 +391,6 @@ func runService(ctx *cli.Context) error {
 
 		tbl.Print()
 	}
-
 	return nil
 }
 

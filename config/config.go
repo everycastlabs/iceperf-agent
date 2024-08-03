@@ -55,10 +55,16 @@ type LoggingConfig struct {
 	Prometheus PromConfig `yaml:"prometheus"`
 }
 
+type TimerConfig struct {
+	Enabled  bool `yaml:"enabled"`
+	Interval int  `yaml:"interval"`
+}
+
 type Config struct {
 	NodeID    string               `yaml:"node_id"`
 	ICEConfig map[string]ICEConfig `yaml:"ice_servers"`
 	Logging   LoggingConfig        `yaml:"logging"`
+	Timer     TimerConfig          `yaml:"timer"`
 
 	WebRTCConfig webrtc.Configuration
 	// TODO the following should be different for answerer and offerer sides
