@@ -5,9 +5,6 @@ name: Build and Test App
 
 on:
   push:
-    branches:
-      - "main"
-      - "add-updates"
     tags:
       - "v*.*.*"
   pull_request:
