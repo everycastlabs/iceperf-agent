@@ -48,7 +48,7 @@ jobs:
     needs:
       - test
     concurrency:
-      group: ${{ github.workflow }}-${{ matrix.goos }}-${{ github.ref }}
+      group: ${{ github.workflow }}-${{ matrix.goos }}-${{ matrix.goarch }}-${{ github.ref }}
       cancel-in-progress: true
     runs-on: ubuntu-latest
     strategy:
