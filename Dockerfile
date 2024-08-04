@@ -19,7 +19,6 @@ RUN apt-get update && apt-get install -y ca-certificates
 COPY --from=builder /iceperf-agent .
 
 RUN ls -lsa /
-COPY config-api.yaml config.yaml
 
 ENTRYPOINT ["./iceperf-agent"]
 CMD ["-config", "config.yaml"]
