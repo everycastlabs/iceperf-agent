@@ -4,9 +4,8 @@
 name: Build and Test App
 
 on:
-  push:
-    tags:
-      - "v*.*.*"
+  release:
+    types: [created]
   pull_request:
     branches: [ "main" ]
 
