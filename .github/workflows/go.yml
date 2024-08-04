@@ -58,11 +58,9 @@ jobs:
       matrix:
         platform:
           - linux/amd64
-          - linux/arm/v6
+          # - linux/arm/v6
           - linux/arm/v7
           - linux/arm64
-          - darwin/arm64
-
     steps:
     - uses: actions/checkout@v4
     - name: Prepare
@@ -178,6 +176,7 @@ jobs:
         goos: ${{ matrix.goos }}
         goarch: ${{ matrix.goarch }}
         project_path: "./cmd/iceperf"
+        overwrite: true
 
     # - name: Build
     #   run: go build -o ${{ matrix.binary-name }} ./cmd/iceperf
