@@ -61,6 +61,7 @@ jobs:
           # - linux/arm/v6
           - linux/arm/v7
           - linux/arm64
+          - linux/riscv64
     steps:
     - uses: actions/checkout@v4
     - name: Prepare
@@ -155,7 +156,7 @@ jobs:
       matrix:
         # build and publish in parallel: linux/386, linux/amd64, linux/arm64, windows/386, windows/amd64, darwin/amd64, darwin/arm64
         goos: [linux, windows, darwin]
-        goarch: [amd64, arm64]
+        goarch: [amd64, arm64, riscv64]
         exclude:
           - goarch: arm64
             goos: windows

@@ -46,6 +46,22 @@ func main() {
 				Aliases: []string{"c"},
 				Usage:   "ICEPerf yaml config file",
 			},
+			&cli.StringFlag{
+				Name:    "api-uri",
+				Aliases: []string{"a"},
+				Usage:   "API URI",
+			},
+			&cli.StringFlag{
+				Name:    "api-key",
+				Aliases: []string{"k"},
+				Usage:   "API Key",
+			},
+			&cli.BoolFlag{
+				Name:    "timer",
+				Aliases: []string{"t"},
+				Value:   false,
+				Usage:   "Enable Timer Mode",
+			},
 		},
 		Action: runService,
 	}
@@ -408,6 +424,31 @@ func getConfig(c *cli.Context) (*config.Config, error) {
 	conf, err := config.NewConfig(configBody)
 	if err != nil {
 		return nil, err
+	}
+
+	//if we got passed in the api host and the api key then overwrite the config
+	//same for timer mode
+	if c.String("api-uri") != "" {
+		conf.Api.Enabled = true
+		conf.Api.URI = c.String("api-uri")
+	}
+
+	if c.String("api-key") != "" {
+		conf.Api.Enabled = true
+		conf.Api.ApiKey = c.String("api-key")
+	}
+
+	if conf.Api.Enabled && conf.Api.URI == "" {
+		conf.Api.URI = "https://api.iceperf.com/api/settings"
+	}
+
+	if c.Bool("timer") {
+		conf.Timer.Enabled = true
+		conf.Timer.Interval = 60
+	}
+
+	if conf.Api.Enabled && conf.Api.ApiKey != "" && conf.Api.URI != "" {
+		conf.UpdateConfigFromApi()
 	}
 
 	return conf, nil
