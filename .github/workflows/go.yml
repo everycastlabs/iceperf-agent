@@ -160,6 +160,10 @@ jobs:
         exclude:
           - goarch: arm64
             goos: windows
+          - goarch: riscv64
+            goos: windows
+          - goarch: riscv64
+            goos: darwin
     steps:
     - uses: actions/checkout@v4
 

@@ -1,4 +1,4 @@
-FROM golang:1.22.5-bookworm AS builder
+FROM golang:1.22.5 AS builder
 
 WORKDIR /app
 
@@ -10,7 +10,7 @@ COPY . .
 
 RUN go build -o /iceperf-agent cmd/iceperf/main.go
 
-FROM debian:bookworm-slim
+FROM alpine
 
 WORKDIR /
 
