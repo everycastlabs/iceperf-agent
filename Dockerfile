@@ -1,4 +1,4 @@
-FROM golang:1.22.5 AS builder
+FROM golang:1.22.5-bullseye AS builder
 
 WORKDIR /app
 
@@ -10,9 +10,11 @@ COPY . .
 
 RUN go build -o /iceperf-agent cmd/iceperf/main.go
 
-FROM alpine
+FROM debian:bullseye-slim
 
 WORKDIR /
+
+RUN apt-get update && apt-get install -y ca-certificates
 
 COPY --from=builder /iceperf-agent .
 
