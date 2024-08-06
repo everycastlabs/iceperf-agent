@@ -182,6 +182,7 @@ jobs:
         goarch: ${{ matrix.goarch }}
         project_path: "./cmd/iceperf"
         overwrite: true
+        asset_name: iceperf-agent-${{ matrix.goos }}-${{ matrix.goarch }}
 
     # - name: Build
     #   run: go build -o ${{ matrix.binary-name }} ./cmd/iceperf
