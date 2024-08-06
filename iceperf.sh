@@ -1,19 +1,24 @@
 #!/bin/bash
 function usage() {
- cat << _EOF_
-Usage: ${0} "apikey" (where apikey is your... apikey =) )
+  cat << _EOF_
+Usage: ${0} apikey [options]
+  apikey            Your API key
+  [options]         Any options to pass to the iceperf-agent
+
+Example: ${0} your-api-key --timer
 
 _EOF_
 }
 
 #-- check arguments and environment
-if [ "$#" -ne "1" ]; then
-  echo "Expected 1 argument, got $#" >&2
+if [ "$#" -lt 1 ]; then
+  echo "Expected at least 1 argument, got $#"
   usage
   exit 2
 fi
 
 APIKEY=$1
+shift
 
 # Determine the architecture
 arch=$(uname -m)
@@ -47,7 +52,7 @@ remote_md5=$(wget -qO- "$md5_url")
 current_md5=$(cat current.md5)
 
 # Compare the hashes
-
+touch current.md5
 echo "Current MD5 is $current_md5"
 echo "Remote MD5 is $remote_md5"
 
@@ -70,7 +75,7 @@ fi
 
 echo "Calling $binary_name with API Key"
 # Run the binary with the api key
-./"$binary_name" --api-key="${APIKEY}"
+./"$binary_name" --api-key="${APIKEY}" "$@"
 
 # Clean up
 rm -f "$local_file"
