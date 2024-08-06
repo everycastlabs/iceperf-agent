@@ -55,8 +55,8 @@ type ApiConfig struct {
 
 type LoggingConfig struct {
 	Level      string     `yaml:"level"`
-	API        ApiConfig  `yaml:"api"`
-	Loki       LokiConfig `yaml:"loki"`
+	API        ApiConfig  `json:"api" yaml:"api"`
+	Loki       LokiConfig `json:"loki" yaml:"loki"`
 	Prometheus PromConfig `yaml:"prometheus"`
 }
 
@@ -164,7 +164,9 @@ func (c *Config) UpdateConfigFromApi() error {
 
 	//lets just do the basics for now....
 	//this needs a lot more work
+	c.NodeID = responseConfig.NodeID
 	c.ICEConfig = responseConfig.ICEConfig
+	c.Logging = responseConfig.Logging
 	// mergeConfigs(c, responseConfig)
 	return nil
 }
