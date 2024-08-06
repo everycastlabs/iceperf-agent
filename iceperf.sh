@@ -70,7 +70,7 @@ fi
 
 echo "Calling $binary_name with API Key"
 # Run the binary with the api key
-./"$binary_name" --api-key="${1}"
+./"$binary_name" --api-key="${APIKEY}"
 
 # Clean up
 rm -f "$local_file"
