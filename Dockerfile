@@ -21,4 +21,4 @@ COPY --from=builder /iceperf-agent .
 RUN ls -lsa /
 
 ENTRYPOINT ["./iceperf-agent"]
-CMD ["-config", "config.yaml"]
+CMD ["-h"]

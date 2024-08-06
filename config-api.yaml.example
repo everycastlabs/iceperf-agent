@@ -1,0 +1,7 @@
+timer:
+  enabled: true
+  interval: 60
+api:
+  enabled: true
+  uri: https://api.iceperf.com/api/settings
+  api_key: your-api-key

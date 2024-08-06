@@ -1,0 +1,79 @@
+node_id:  1
+timer:
+  enabled: true
+  interval: 60
+logging:
+  level: info
+  api:
+    enabled: true
+    uri: https://api.iceperf.com/api/insert
+    api_key: your-api-key
+  loki:
+    enabled: false
+    url: a-loki-push-url
+ice_servers:
+  api:
+    enabled: false
+    request_url: https://api.iceperf.com/api/iceServers
+    api_key: your-api-key
+  metered:
+    enabled: true
+    api_key: your-metered-api-key
+    request_url: https://your-subdomain.metered.live/api/v1/turn/credentials
+    stun_enabled: false
+    turn_enabled: false
+    do_throughput: false
+  cloudflare:
+    enabled: true
+    request_url: https://rtc.live.cloudflare.com/v1/turn/keys/your-app-id/credentials/generate
+    api_key: your-cloudflare-api-key
+    stun_enabled: true
+    turn_enabled: true
+    do_throughput: false
+  twilio:
+    enabled: false
+    http_username: your-twilio-account-id
+    http_password: your-account-secret
+    request_url: https://api.twilio.com/2010-04-01/Accounts/your-twilio-account-id/Tokens.json
+    stun_enabled: false
+    turn_enabled: false
+    do_throughput: false
+  google:
+    enabled: false
+    stun_host: stun.l.google.com
+    stun_enabled: false
+    turn_enabled: false
+    stun_ports:
+      udp:
+        - 19302
+  xirsys:
+    enabled: false
+    http_username: your-xirsys-username
+    http_password: your-xirsys-api-password
+    request_url: https://global.xirsys.net/_turn/your-app-id
+    stun_enabled: false
+    turn_enabled: false
+    do_throughput: false
+  expressturn:
+    enabled: false
+    username: expressturn-cred-username
+    password: expressturn-cred-password
+    stun_host: relay1.expressturn.com
+    turn_host: relay1.expressturn.com
+    stun_enabled: false
+    turn_enabled: false
+    do_throughput: false
+    stun_ports:
+      udp:
+        - 3478
+        # - 53
+    turn_ports:
+      udp:
+        - 3478
+        # - 80
+      tcp:
+        - 3478
+        # - 443
+      tls:
+        - 5349
+        # - 443

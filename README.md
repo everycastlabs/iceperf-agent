@@ -8,10 +8,22 @@ ICEPerf is an open source project that helps you test and compare the performanc
 Run ICE servers performance tests and report the results.
 
 ## Installation
-You can download the pre-built binary, or download the code and build it locally.
+You can download the pre-built binary, the docker image or download the code and build it locally.
 
 ### Binary
-Download the binary to run it natively (currently only on Linux x86).
+Download the binary to run it natively - You can find these in the [github releases](https://github.com/nimbleape/iceperf-agent/releases).
+
+### Docker
+
+Run the docker image as a container.
+
+`docker run -d nimbleape/iceperf-agent --timer --api-key=your-api-key`
+
+The default CLI flags passed into the binary is `-h` outputting the help information.
+
+If you want to pass in a config file you would need to pass in the config file as a file mount and the cli flags; like so:
+
+`docker run -v $PWD/config.yaml:/config.yaml -d nimbleape/iceperf-agent --config config.yaml`
 
 ### Build locally
 To install the local project, clone the repo and run the following command from the root folder:
@@ -27,6 +39,10 @@ To run the app from the terminal, do:
 iceperf --config path/to/config.yaml
 ```
 
+```zsh
+iceperf --api-key="foo"
+```
+
 ### Commands
 None yet.
 
@@ -34,76 +50,12 @@ None yet.
 - `--config` or `-c` to specify the path for the config `.yaml` file (required)
 - `-h` or `--help` for the help menu
 - `-v` or `--version` for the app version
+- `--api-uri` or `-a` to specify the API URI
+- `--api-key` or `-k` to specify the API Key
+- `--timer` or `-t` to enable Timer Mode (default: false)
 
 ### Config file
-A `.yaml` file to provide ICE server providers credentials and other settings.
+A `.yaml` file to provide ICE server providers credentials and other settings. Examlpes of two config files can be found in the repo. Rename `config-api.yaml.exmaple` and `config.yaml.example` to remove the `.example` extension.
 
-Example:
-
-```yaml
-logging:
-  level: debug
-   loki:
-    enabled: true
-    use_headers_auth: false
-    use_basic_auth: true
-    username: username
-    password: password
-    url: url
-ice_servers:
-  metered:
-    enabled: false
-    username: aaaaa
-    password: bbbbb
-    api_key: ccccc
-    request_url: https://accountname.metered.live/api/v1/turn/credentials
-  cloudflare:
-    enabled: true
-    username: aaaaa
-    password: bbbbb
-    stun_host: stun.cloudflare.com
-    turn_host: turn.cloudflare.com
-    turn_ports:
-      udp:
-        - 3478
-        - 53
-      tcp:
-        - 3478
-        - 80
-      tls:
-        - 5349
-        - 443
-   elixir:
-    enabled: true
-    http_username: username
-    request_url: url
-    stun_enabled: false
-    turn_enabled: true
-  twilio:
-    enabled: false
-    http_username: aaaaa
-    http_password: bbbbb
-    request_url: https://api.twilio.com/2010-04-01/Accounts/$TWILIO_ACCOUNT_SID/Tokens.json
-    request_method: POST
-  xirsys:
-    enabled: false
-    http_username: aaaaa
-    http_password: bbbbb
-    request_url: https://global.xirsys.net/_turn/IcePerf
-  expressturn:
-    enabled: false
-    username: aaaaa
-    password: bbbbb
-    stun_host: relay1.expressturn.com
-    turn_host: relay1.expressturn.com
-    turn_ports:
-      udp:
-        - 3478
-        - 80
-      tcp:
-        - 3478
-        - 443
-      tls:
-        - 5349
-        - 443
-```
+`config-api.yaml` is a minimal config when talking to the ICEPerf api.
+`config.yaml` is a full example if not talking to the ICEPerf api.
