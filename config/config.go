@@ -6,6 +6,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"reflect"
 
 	"github.com/pion/webrtc/v4"
 	"github.com/prometheus/client_golang/prometheus"
@@ -82,6 +83,41 @@ type Config struct {
 	Registry    *prometheus.Registry
 }
 
+func mergeConfigs(c, responseConfig interface{}) {
+	mergeStructs(reflect.ValueOf(c).Elem(), reflect.ValueOf(responseConfig).Elem())
+}
+
+func mergeStructs(cValue, respValue reflect.Value) {
+	for i := 0; i < respValue.NumField(); i++ {
+		respField := respValue.Field(i)
+		cField := cValue.Field(i)
+
+		if !respField.IsZero() {
+			switch respField.Kind() {
+			case reflect.Ptr:
+				if !respField.IsNil() {
+					if cField.IsNil() {
+						cField.Set(reflect.New(cField.Type().Elem()))
+					}
+					mergeStructs(cField.Elem(), respField.Elem())
+				}
+			case reflect.Struct:
+				mergeStructs(cField, respField)
+			case reflect.Map:
+				if cField.IsNil() {
+					cField.Set(reflect.MakeMap(cField.Type()))
+				}
+				for _, key := range respField.MapKeys() {
+					val := respField.MapIndex(key)
+					cField.SetMapIndex(key, val)
+				}
+			default:
+				cField.Set(respField)
+			}
+		}
+	}
+}
+
 func NewConfig(confString string) (*Config, error) {
 	c := &Config{
 		ServiceName: "ICEPerf",
@@ -127,8 +163,8 @@ func (c *Config) UpdateConfigFromApi() error {
 	//go and merge in values from the API into the config
 
 	//lets just do the basics for now....
-
+	//this needs a lot more work
 	c.ICEConfig = responseConfig.ICEConfig
-
+	// mergeConfigs(c, responseConfig)
 	return nil
 }
