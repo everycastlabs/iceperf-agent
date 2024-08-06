@@ -394,7 +394,7 @@ func runTest(logg *slog.Logger, config *config.Config) error {
 	// 	logger.Info("Wrote stats to prom")
 
 	// }
-	if !config.Logging.Loki.Enabled && !config.Logging.API.Enabled {
+	// if !config.Logging.Loki.Enabled && !config.Logging.API.Enabled {
 		headerFmt := color.New(color.FgGreen, color.Underline).SprintfFunc()
 		columnFmt := color.New(color.FgYellow).SprintfFunc()
 
@@ -406,7 +406,7 @@ func runTest(logg *slog.Logger, config *config.Config) error {
 		}
 
 		tbl.Print()
-	}
+	//}
 	return nil
 }
 
