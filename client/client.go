@@ -279,7 +279,7 @@ func (c *Client) Stop() error {
 		defer resp.Body.Close()
 
 		// Check the response
-		if resp.StatusCode == http.StatusOK {
+		if resp.StatusCode == http.StatusCreated {
 			fmt.Println("Data sent successfully!")
 		} else {
 			fmt.Printf("Failed to send data. Status code: %d\n", resp.StatusCode)
