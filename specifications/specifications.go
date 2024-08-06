@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/alecthomas/assert/v2"
-	"github.com/pion/webrtc/v4"
+	"github.com/nimbleape/iceperf-agent/adapters"
 )
 
 /*
@@ -19,7 +19,7 @@ type ServerConnect interface {
 	Connect() (bool, error)
 }
 type TURNProvider interface {
-	GetIceServers() ([]webrtc.ICEServer, error)
+	GetIceServers() (adapters.IceServersConfig, error)
 }
 
 func ConnectToServerSpecification(t testing.TB, serverConnect ServerConnect) {
@@ -31,5 +31,5 @@ func ConnectToServerSpecification(t testing.TB, serverConnect ServerConnect) {
 func GetIceServersSpecification(t testing.TB, provider TURNProvider) {
 	is, err := provider.GetIceServers()
 	assert.NoError(t, err)
-	assert.True(t, len(is) > 0)
+	assert.True(t, len(is.IceServers) > 0)
 }

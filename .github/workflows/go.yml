@@ -5,12 +5,15 @@ name: Build and Test App
 
 on:
   push:
-    branches:
-      - "main"
     tags:
       - "v*.*.*"
+  release:
+    types: [created]
   pull_request:
     branches: [ "main" ]
+
+env:
+  REGISTRY_IMAGE: nimbleape/iceperf-agent
 
 jobs:
   test:
@@ -42,39 +45,149 @@ jobs:
           XIRSYS_HTTP_USERNAME: ${{ secrets.XIRSYS_HTTP_USERNAME  }}
           XIRSYS_HTTP_PASSWORD: ${{ secrets.XIRSYS_HTTP_PASSWORD  }}
           XIRSYS_REQUEST_URL: ${{ secrets.XIRSYS_REQUEST_URL  }}
-  build:
-    name: Build
+  build-docker:
+    name: Build Docker
     needs:
       - test
     concurrency:
-      group: ${{ github.workflow }}-${{ matrix.os }}-${{ github.ref }}
+      group: ${{ github.workflow }}-${{ matrix.platform }}-${{ github.ref }}
       cancel-in-progress: true
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          - linux/amd64
+          # - linux/arm/v6
+          - linux/arm/v7
+          - linux/arm64
+          # - linux/riscv64
+    steps:
+    - uses: actions/checkout@v4
+    - name: Prepare
+      run: |
+        platform=${{ matrix.platform }}
+        echo "PLATFORM_PAIR=${platform//\//-}" >> $GITHUB_ENV
+
+    - name: Docker meta
+      id: meta
+      uses: docker/metadata-action@v5
+      with:
+        images: ${{ env.REGISTRY_IMAGE }}
+
+    - name: Set up QEMU
+      uses: docker/setup-qemu-action@v3
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Login to Docker Hub
+      uses: docker/login-action@v3
+      with:
+        username: ${{ vars.DOCKERHUB_USERNAME }}
+        password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+    - name: Build and push by digest
+      id: build
+      uses: docker/build-push-action@v6
+      with:
+        platforms: ${{ matrix.platform }}
+        labels: ${{ steps.meta.outputs.labels }}
+        outputs: type=image,name=${{ env.REGISTRY_IMAGE }},push-by-digest=true,name-canonical=true,push=true
+
+    - name: Export digest
+      run: |
+        mkdir -p /tmp/digests
+        digest="${{ steps.build.outputs.digest }}"
+        touch "/tmp/digests/${digest#sha256:}"
+
+    - name: Upload digest
+      uses: actions/upload-artifact@v4
+      with:
+        name: digests-${{ env.PLATFORM_PAIR }}
+        path: /tmp/digests/*
+        if-no-files-found: error
+        retention-days: 1
+  merge:
+    runs-on: ubuntu-latest
+    needs:
+      - build-docker
+    steps:
+      - name: Download digests
+        uses: actions/download-artifact@v4
+        with:
+          path: /tmp/digests
+          pattern: digests-*
+          merge-multiple: true
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Docker meta
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY_IMAGE }}
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ vars.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Create manifest list and push
+        working-directory: /tmp/digests
+        run: |
+          docker buildx imagetools create $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
+            $(printf '${{ env.REGISTRY_IMAGE }}@sha256:%s ' *)
+
+      - name: Inspect image
+        run: |
+          docker buildx imagetools inspect ${{ env.REGISTRY_IMAGE }}:${{ steps.meta.outputs.version }}
+  build:
+    name: Build Binary
+    needs:
+      - test
+    concurrency:
+      group: ${{ github.workflow }}-${{ matrix.goos }}-${{ matrix.goarch }}-${{ github.ref }}
+      cancel-in-progress: true
+    runs-on: ubuntu-latest
     strategy:
       matrix:
-        include:
-          - os: macos-latest-xlarge
-            binary-name: iceperf-darwin-arm64
-          - os: windows-latest
-            binary-name: iceperf-windows-x86-64
-          - os: ubuntu-latest
-            binary-name: iceperf-linux-x86-64
-    runs-on: ${{ matrix.os }}
+        # build and publish in parallel: linux/386, linux/amd64, linux/arm64, windows/386, windows/amd64, darwin/amd64, darwin/arm64
+        goos: [linux, windows, darwin]
+        goarch: [amd64, arm64, riscv64]
+        exclude:
+          - goarch: arm64
+            goos: windows
+          - goarch: riscv64
+            goos: windows
+          - goarch: riscv64
+            goos: darwin
     steps:
     - uses: actions/checkout@v4
 
-    - name: Set up Go
-      uses: actions/setup-go@v4
+    # - name: Set up Go
+    #   uses: actions/setup-go@v4
+    #   with:
+    #     go-version: '1.22.x'
+
+    # - name: Install dependencies
+    #   run: go get ./cmd/iceperf
+
+    - uses: wangyoucao577/go-release-action@v1
       with:
-        go-version: '1.22.x'
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        goos: ${{ matrix.goos }}
+        goarch: ${{ matrix.goarch }}
+        project_path: "./cmd/iceperf"
+        overwrite: true
 
-    - name: Install dependencies
-      run: go get ./cmd/iceperf
+    # - name: Build
+    #   run: go build -o ${{ matrix.binary-name }} ./cmd/iceperf
 
-    - name: Build
-      run: go build -o ${{ matrix.binary-name }} ./cmd/iceperf
-
-    - name: Release
-      uses: softprops/action-gh-release@v2
-      if: startsWith(github.ref, 'refs/tags/')
-      with:
-        files: ${{ matrix.binary-name }}
+    # - name: Release
+    #   uses: softprops/action-gh-release@v2
+    #   if: startsWith(github.ref, 'refs/tags/')
+    #   with:
+    #     files: ${{ matrix.binary-name }}

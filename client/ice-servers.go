@@ -1,6 +1,10 @@
 package client
 
 import (
+	"log/slog"
+
+	"github.com/nimbleape/iceperf-agent/adapters"
+	"github.com/nimbleape/iceperf-agent/adapters/api"
 	"github.com/nimbleape/iceperf-agent/adapters/cloudflare"
 	"github.com/nimbleape/iceperf-agent/adapters/elixir"
 	"github.com/nimbleape/iceperf-agent/adapters/expressturn"
@@ -10,33 +14,52 @@ import (
 	"github.com/nimbleape/iceperf-agent/adapters/xirsys"
 	"github.com/nimbleape/iceperf-agent/config"
 	"github.com/pion/webrtc/v4"
+	"github.com/rs/xid"
 	// log "github.com/sirupsen/logrus"
 )
 
-func formGenericIceServers(config *config.ICEConfig) (iceServers []webrtc.ICEServer, err error) {
-	return nil, nil
+func formGenericIceServers(config *config.ICEConfig) (adapters.IceServersConfig, error) {
+	return adapters.IceServersConfig{}, nil
 }
 
-func GetIceServers(config *config.Config) (iceServers map[string][]webrtc.ICEServer, err error) {
-	iceServers = make(map[string][]webrtc.ICEServer)
+type IceServersConfig struct {
+	IceServers   map[string][]webrtc.ICEServer
+	DoThroughput bool
+}
+
+func GetIceServers(config *config.Config, logger *slog.Logger, testRunId xid.ID) (map[string]adapters.IceServersConfig, string, error) {
+
+	//check if the API is set and is enabled
+	if apiConfig, ok := config.ICEConfig["api"]; ok && apiConfig.Enabled {
+		md := api.Driver{
+			Config: &apiConfig,
+			Logger: logger,
+		}
+		iceServers, node, err := md.GetIceServers(testRunId)
+		return iceServers, node, err
+	}
+
+	iceServers := make(map[string]adapters.IceServersConfig)
 
 	//loop through
 	for key, conf := range config.ICEConfig {
 		switch key {
+		case "api":
+			continue
 		case "elixir":
 			if !conf.Enabled {
 				continue
 			}
 			md := elixir.Driver{
 				Config: &conf,
+				Logger: logger,
 			}
 			is, err := md.GetIceServers()
 			if err != nil {
-				// log.WithFields(log.Fields{
-				// 	"error": err,
-				// }).Error("Error getting elixir ice servers")
-				return nil, err
+				logger.Error("Error getting elixir ice servers")
+				return nil, "", err
 			}
+			logger.Info("elixir IceServers", "is", is)
 			iceServers[key] = is
 		case "google":
 			if !conf.Enabled {
@@ -44,14 +67,15 @@ func GetIceServers(config *config.Config) (iceServers map[string][]webrtc.ICESer
 			}
 			md := google.Driver{
 				Config: &conf,
+				Logger: logger,
 			}
 			is, err := md.GetIceServers()
 			if err != nil {
-				// log.WithFields(log.Fields{
-				// 	"error": err,
-				// }).Error("Error getting google ice servers")
-				return nil, err
+				logger.Error("Error getting google ice servers")
+				return nil, "", err
 			}
+			logger.Info("google IceServers", "is", is)
+
 			iceServers[key] = is
 		case "metered":
 			if !conf.Enabled {
@@ -59,14 +83,15 @@ func GetIceServers(config *config.Config) (iceServers map[string][]webrtc.ICESer
 			}
 			md := metered.Driver{
 				Config: &conf,
+				Logger: logger,
 			}
 			is, err := md.GetIceServers()
 			if err != nil {
-				// log.WithFields(log.Fields{
-				// 	"error": err,
-				// }).Error("Error getting metered ice servers")
-				return nil, err
+				logger.Error("Error getting metered ice servers")
+				return nil, "", err
 			}
+			logger.Info("metered IceServers", "is", is)
+
 			iceServers[key] = is
 		case "twilio":
 			if !conf.Enabled {
@@ -74,14 +99,15 @@ func GetIceServers(config *config.Config) (iceServers map[string][]webrtc.ICESer
 			}
 			td := twilio.Driver{
 				Config: &conf,
+				Logger: logger,
 			}
 			is, err := td.GetIceServers()
 			if err != nil {
-				// log.WithFields(log.Fields{
-				// 	"error": err,
-				// }).Error("Error getting twilio ice servers")
-				return nil, err
+				logger.Error("Error getting twilio ice servers")
+				return nil, "", err
 			}
+			logger.Info("twilio IceServers", "is", is)
+
 			iceServers[key] = is
 		case "xirsys":
 			if !conf.Enabled {
@@ -89,14 +115,15 @@ func GetIceServers(config *config.Config) (iceServers map[string][]webrtc.ICESer
 			}
 			xd := xirsys.Driver{
 				Config: &conf,
+				Logger: logger,
 			}
 			is, err := xd.GetIceServers()
 			if err != nil {
-				// log.WithFields(log.Fields{
-				// 	"error": err,
-				// }).Error("Error getting xirsys ice servers")
-				return nil, err
+				logger.Error("Error getting xirsys ice servers")
+				return nil, "", err
 			}
+			logger.Info("xirsys IceServers", "is", is)
+
 			iceServers[key] = is
 		case "cloudflare":
 			if !conf.Enabled {
@@ -104,14 +131,15 @@ func GetIceServers(config *config.Config) (iceServers map[string][]webrtc.ICESer
 			}
 			cd := cloudflare.Driver{
 				Config: &conf,
+				Logger: logger,
 			}
 			is, err := cd.GetIceServers()
 			if err != nil {
-				// log.WithFields(log.Fields{
-				// 	"error": err,
-				// }).Error("Error getting Cloudflare ice servers")
-				return nil, err
+				logger.Error("Error getting cloudflare ice servers")
+				return nil, "", err
 			}
+			logger.Info("cloudflare IceServers", "is", is)
+
 			iceServers[key] = is
 		case "expressturn":
 			if !conf.Enabled {
@@ -119,26 +147,28 @@ func GetIceServers(config *config.Config) (iceServers map[string][]webrtc.ICESer
 			}
 			ed := expressturn.Driver{
 				Config: &conf,
+				Logger: logger,
 			}
 			is, err := ed.GetIceServers()
 			if err != nil {
-				// log.WithFields(log.Fields{
-				// 	"error": err,
-				// }).Error("Error getting Expressturn ice servers")
-				return nil, err
+				logger.Error("Error getting expressturn ice servers")
+
+				return nil, "", err
 			}
+			logger.Info("expressturn IceServers", "is", is)
+
 			iceServers[key] = is
 		default:
 			is, err := formGenericIceServers(&conf)
 			if err != nil {
-				// log.WithFields(log.Fields{
-				// 	"error": err,
-				// }).Error("Error constructing ice servers")
-				return nil, err
+				logger.Error("Error getting generic ice servers")
+				return nil, "", err
 			}
+			logger.Info("default IceServers", "key", key, "is", is)
+
 			iceServers[key] = is
 		}
 	}
 
-	return
+	return iceServers, "", nil
 }

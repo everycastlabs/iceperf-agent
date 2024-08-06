@@ -20,24 +20,58 @@ type Stats struct {
 	Throughput                             map[int64]float64 `json:"throughput"`
 	ThroughputMax                          float64           `json:"throughputMax"`
 	TestRunStartedAt                       time.Time         `json:"testRunStartedAt"`
+	Provider                               string            `json:"provider"`
+	Scheme                                 string            `json:"scheme"`
+	Protocol                               string            `json:"protocol"`
+	Port                                   string            `json:"port"`
+	Node                                   string            `json:"node"`
+	TimeToConnectedState                   int64             `json:"timeToConnectedState"`
+	Connected                              bool              `json:"connected"`
 }
 
 // NewStats creates a new Stats object with a given test run ID
-func NewStats(testRunID string, labels map[string]string, testRunStartedAt time.Time) *Stats {
-	return &Stats{
+func NewStats(testRunID string, testRunStartedAt time.Time) *Stats {
+	s := &Stats{
 		TestRunID:        testRunID,
 		TestRunStartedAt: testRunStartedAt,
-		Labels:           labels,
 		Throughput:       make(map[int64]float64), // Initialize the Throughput map
+		Connected:        false,
 	}
+
+	return s
 }
 
-func (s *Stats) SetAnswererTimeToReceiveCandidate(c float64) {
-	s.AnswererTimeToReceiveCandidate = c
+func (s *Stats) SetTimeToConnectedState(t int64) {
+	s.TimeToConnectedState = t
+	s.Connected = true
+}
+
+func (s *Stats) SetProvider(st string) {
+	s.Provider = st
+}
+
+func (s *Stats) SetScheme(st string) {
+	s.Scheme = st
+}
+
+func (s *Stats) SetProtocol(st string) {
+	s.Protocol = st
+}
+
+func (s *Stats) SetPort(st string) {
+	s.Port = st
+}
+
+func (s *Stats) SetNode(st string) {
+	s.Node = st
 }
 
 func (s *Stats) SetOffererTimeToReceiveCandidate(o float64) {
 	s.OffererTimeToReceiveCandidate = o
+}
+
+func (s *Stats) SetAnswererTimeToReceiveCandidate(o float64) {
+	s.AnswererTimeToReceiveCandidate = o
 }
 
 func (s *Stats) SetOffererDcBytesSentTotal(d float64) {
@@ -77,9 +111,20 @@ func (s *Stats) AddThroughput(tp int64, v float64) {
 	}
 }
 
+func (s *Stats) CreateLabels() {
+	s.Labels = map[string]string{
+		"provider": s.Provider,
+		"scheme":   s.Scheme,
+		"protocol": s.Protocol,
+		"port":     s.Port,
+		"location": s.Node,
+	}
+}
+
 // ToJSON returns the stats object as a JSON string
 func (s *Stats) ToJSON() (string, error) {
 	jsonBytes, err := json.Marshal(s)
+
 	if err != nil {
 		return "", err
 	}

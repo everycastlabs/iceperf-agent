@@ -4,9 +4,11 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"log/slog"
 	"net/http"
 	"strings"
 
+	"github.com/nimbleape/iceperf-agent/adapters"
 	"github.com/nimbleape/iceperf-agent/config"
 	"github.com/pion/stun/v2"
 	"github.com/pion/webrtc/v4"
@@ -15,6 +17,7 @@ import (
 
 type Driver struct {
 	Config *config.ICEConfig
+	Logger *slog.Logger
 }
 
 type XirsysIceServers struct {
@@ -31,8 +34,12 @@ type XirsysResponse struct {
 	S string          `json:"s"`
 }
 
-func (d *Driver) GetIceServers() (iceServers []webrtc.ICEServer, err error) {
+func (d *Driver) GetIceServers() (adapters.IceServersConfig, error) {
 	client := &http.Client{}
+
+	iceServers := adapters.IceServersConfig{
+		IceServers: []webrtc.ICEServer{},
+	}
 
 	req, err := http.NewRequest("PUT", d.Config.RequestUrl, strings.NewReader(`{"format": "urls", "expire": "1800"}`))
 	req.SetBasicAuth(d.Config.HttpUsername, d.Config.HttpPassword)
@@ -42,7 +49,7 @@ func (d *Driver) GetIceServers() (iceServers []webrtc.ICEServer, err error) {
 		// log.WithFields(log.Fields{
 		// 	"error": err,
 		// }).Error("Error forming http request")
-		return nil, err
+		return iceServers, err
 	}
 
 	res, err := client.Do(req)
@@ -50,7 +57,7 @@ func (d *Driver) GetIceServers() (iceServers []webrtc.ICEServer, err error) {
 		// log.WithFields(log.Fields{
 		// 	"error": err,
 		// }).Error("Error doing http response")
-		return nil, err
+		return iceServers, err
 	}
 
 	defer res.Body.Close()
@@ -61,7 +68,7 @@ func (d *Driver) GetIceServers() (iceServers []webrtc.ICEServer, err error) {
 		// 	"error":  err,
 		// 	"status": res.StatusCode,
 		// }).Error("Error status code http response")
-		return nil, err
+		return iceServers, err
 	}
 
 	responseData, err := io.ReadAll(res.Body)
@@ -69,7 +76,7 @@ func (d *Driver) GetIceServers() (iceServers []webrtc.ICEServer, err error) {
 		// log.WithFields(log.Fields{
 		// 	"error": err,
 		// }).Error("Error reading http response")
-		return nil, err
+		return iceServers, err
 	}
 
 	responseServers := XirsysResponse{}
@@ -88,7 +95,7 @@ func (d *Driver) GetIceServers() (iceServers []webrtc.ICEServer, err error) {
 		info, err := stun.ParseURI(r)
 
 		if err != nil {
-			return nil, err
+			return iceServers, err
 		}
 
 		if ((info.Scheme == stun.SchemeTypeTURN || info.Scheme == stun.SchemeTypeTURNS) && !d.Config.TurnEnabled) || ((info.Scheme == stun.SchemeTypeSTUN || info.Scheme == stun.SchemeTypeSTUNS) && !d.Config.StunEnabled) {
@@ -110,7 +117,7 @@ func (d *Driver) GetIceServers() (iceServers []webrtc.ICEServer, err error) {
 		if responseServers.V.IceServers.Credential != "" {
 			s.Credential = responseServers.V.IceServers.Credential
 		}
-		iceServers = append(iceServers, s)
+		iceServers.IceServers = append(iceServers.IceServers, s)
 		gotTransports[info.Scheme.String()+info.Proto.String()] = true
 	}
 

@@ -5,9 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"strings"
 
+	"github.com/nimbleape/iceperf-agent/adapters"
 	"github.com/nimbleape/iceperf-agent/config"
 	"github.com/pion/stun/v2"
 	"github.com/pion/webrtc/v4"
@@ -15,6 +17,7 @@ import (
 
 type Driver struct {
 	Config *config.ICEConfig
+	Logger *slog.Logger
 }
 
 type CloudflareIceServers struct {
@@ -22,11 +25,17 @@ type CloudflareIceServers struct {
 	Username   string   `json:"username,omitempty"`
 	Credential string   `json:"credential,omitempty"`
 }
+
 type CloudflareResponse struct {
 	IceServers CloudflareIceServers `json:"iceServers"`
 }
 
-func (d *Driver) GetIceServers() (iceServers []webrtc.ICEServer, err error) {
+func (d *Driver) GetIceServers() (adapters.IceServersConfig, error) {
+
+	iceServers := adapters.IceServersConfig{
+		IceServers: []webrtc.ICEServer{},
+	}
+
 	if d.Config.RequestUrl != "" {
 
 		client := &http.Client{}
@@ -39,7 +48,7 @@ func (d *Driver) GetIceServers() (iceServers []webrtc.ICEServer, err error) {
 			// log.WithFields(log.Fields{
 			// 	"error": err,
 			// }).Error("Error forming http request")
-			return nil, err
+			return iceServers, err
 		}
 
 		res, err := client.Do(req)
@@ -47,7 +56,7 @@ func (d *Driver) GetIceServers() (iceServers []webrtc.ICEServer, err error) {
 			// log.WithFields(log.Fields{
 			// 	"error": err,
 			// }).Error("Error doing http response")
-			return nil, err
+			return iceServers, err
 		}
 
 		defer res.Body.Close()
@@ -58,7 +67,7 @@ func (d *Driver) GetIceServers() (iceServers []webrtc.ICEServer, err error) {
 			// 	"code": res.StatusCode,
 			// 	"error": err,
 			// }).Error("Error status code http response")
-			return nil, err
+			return iceServers, err
 		}
 
 		responseData, err := io.ReadAll(res.Body)
@@ -66,7 +75,7 @@ func (d *Driver) GetIceServers() (iceServers []webrtc.ICEServer, err error) {
 			// log.WithFields(log.Fields{
 			// 	"error": err,
 			// }).Error("Error reading http response")
-			return nil, err
+			return iceServers, err
 		}
 		// log.Info("got a response back from cloudflare api")
 
@@ -82,7 +91,7 @@ func (d *Driver) GetIceServers() (iceServers []webrtc.ICEServer, err error) {
 			info, err := stun.ParseURI(r)
 
 			if err != nil {
-				return nil, err
+				return iceServers, err
 			}
 
 			if ((info.Scheme == stun.SchemeTypeTURN || info.Scheme == stun.SchemeTypeTURNS) && !d.Config.TurnEnabled) || ((info.Scheme == stun.SchemeTypeSTUN || info.Scheme == stun.SchemeTypeSTUNS) && !d.Config.StunEnabled) {
@@ -99,13 +108,13 @@ func (d *Driver) GetIceServers() (iceServers []webrtc.ICEServer, err error) {
 			if responseServers.IceServers.Credential != "" {
 				s.Credential = responseServers.IceServers.Credential
 			}
-			iceServers = append(iceServers, s)
+			iceServers.IceServers = append(iceServers.IceServers, s)
 		}
 	} else {
 		if d.Config.StunHost != "" && d.Config.StunEnabled {
 			if _, ok := d.Config.StunPorts["udp"]; ok {
 				for _, port := range d.Config.StunPorts["udp"] {
-					iceServers = append(iceServers, webrtc.ICEServer{
+					iceServers.IceServers = append(iceServers.IceServers, webrtc.ICEServer{
 						URLs: []string{fmt.Sprintf("stun:%s:%d", d.Config.StunHost, port)},
 					})
 				}
@@ -117,7 +126,7 @@ func (d *Driver) GetIceServers() (iceServers []webrtc.ICEServer, err error) {
 				switch transport {
 				case "udp":
 					for _, port := range d.Config.TurnPorts["udp"] {
-						iceServers = append(iceServers, webrtc.ICEServer{
+						iceServers.IceServers = append(iceServers.IceServers, webrtc.ICEServer{
 							URLs:       []string{fmt.Sprintf("turn:%s:%d?transport=udp", d.Config.TurnHost, port)},
 							Username:   d.Config.Username,
 							Credential: d.Config.Password,
@@ -125,7 +134,7 @@ func (d *Driver) GetIceServers() (iceServers []webrtc.ICEServer, err error) {
 					}
 				case "tcp":
 					for _, port := range d.Config.TurnPorts["tcp"] {
-						iceServers = append(iceServers, webrtc.ICEServer{
+						iceServers.IceServers = append(iceServers.IceServers, webrtc.ICEServer{
 							URLs:       []string{fmt.Sprintf("turn:%s:%d?transport=tcp", d.Config.TurnHost, port)},
 							Username:   d.Config.Username,
 							Credential: d.Config.Password,
@@ -133,7 +142,7 @@ func (d *Driver) GetIceServers() (iceServers []webrtc.ICEServer, err error) {
 					}
 				case "tls":
 					for _, port := range d.Config.TurnPorts["tls"] {
-						iceServers = append(iceServers, webrtc.ICEServer{
+						iceServers.IceServers = append(iceServers.IceServers, webrtc.ICEServer{
 							URLs:       []string{fmt.Sprintf("turns:%s:%d?transport=tcp", d.Config.TurnHost, port)},
 							Username:   d.Config.Username,
 							Credential: d.Config.Password,
@@ -144,5 +153,5 @@ func (d *Driver) GetIceServers() (iceServers []webrtc.ICEServer, err error) {
 			}
 		}
 	}
-	return
+	return iceServers, nil
 }

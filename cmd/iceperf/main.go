@@ -5,12 +5,14 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"time"
 
 	"github.com/nimbleape/iceperf-agent/client"
 	"github.com/nimbleape/iceperf-agent/config"
+	"github.com/nimbleape/iceperf-agent/stats"
 	"github.com/nimbleape/iceperf-agent/version"
 	"github.com/pion/stun/v2"
 	"github.com/pion/webrtc/v4"
@@ -27,6 +29,9 @@ import (
 
 	// "github.com/grafana/loki-client-go/loki"
 	loki "github.com/magnetde/slog-loki"
+
+	"github.com/fatih/color"
+	"github.com/rodaine/table"
 )
 
 func main() {
@@ -40,6 +45,22 @@ func main() {
 				Name:    "config",
 				Aliases: []string{"c"},
 				Usage:   "ICEPerf yaml config file",
+			},
+			&cli.StringFlag{
+				Name:    "api-uri",
+				Aliases: []string{"a"},
+				Usage:   "API URI",
+			},
+			&cli.StringFlag{
+				Name:    "api-key",
+				Aliases: []string{"k"},
+				Usage:   "API Key",
+			},
+			&cli.BoolFlag{
+				Name:    "timer",
+				Aliases: []string{"t"},
+				Value:   false,
+				Usage:   "Enable Timer Mode",
 			},
 		},
 		Action: runService,
@@ -57,9 +78,6 @@ func runService(ctx *cli.Context) error {
 		return err
 	}
 
-	testRunId := xid.New()
-	testRunStartedAt := time.Now()
-
 	lvl := new(slog.LevelVar)
 	lvl.Set(slog.LevelInfo)
 
@@ -67,22 +85,45 @@ func runService(ctx *cli.Context) error {
 
 	var logg *slog.Logger
 
+	var loggingLevel slog.Level
+
+	switch config.Logging.Level {
+	case "debug":
+		loggingLevel = slog.LevelDebug
+	case "info":
+		loggingLevel = slog.LevelInfo
+	case "error":
+		loggingLevel = slog.LevelError
+	default:
+		loggingLevel = slog.LevelInfo
+	}
+
 	if config.Logging.Loki.Enabled {
 
 		// config, _ := loki.NewDefaultConfig(config.Logging.Loki.URL)
 		// // config.TenantID = "xyz"
 		// client, _ := loki.New(config)
 
-		lokiHandler := loki.NewHandler(config.Logging.Loki.URL, loki.WithLabelsEnabled(loki.LabelAll...))
+		lokiHandler := loki.NewHandler(
+			config.Logging.Loki.URL,
+			loki.WithLabelsEnabled(loki.LabelAll...),
+			loki.WithHandler(func(w io.Writer) slog.Handler {
+				return slog.NewJSONHandler(w, &slog.HandlerOptions{
+					Level: loggingLevel,
+				})
+			}))
 
 		logg = slog.New(
 			slogmulti.Fanout(
 				slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
-					Level: slog.LevelInfo,
+					Level: loggingLevel,
 				}),
+				// slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{
+				// 	Level: slog.LevelInfo,
+				// }),
 				lokiHandler,
 			),
-		).With("app", "iceperftest")
+		).With("app", "iceperf")
 
 		// stop loki client and purge buffers
 		defer lokiHandler.Close()
@@ -139,22 +180,44 @@ func runService(ctx *cli.Context) error {
 		// log.AddHook(hook)
 	} else {
 		handlerOpts := &slog.HandlerOptions{
-			Level: slog.LevelInfo,
+			Level: loggingLevel,
 		}
 		logg = slog.New(slog.NewTextHandler(os.Stderr, handlerOpts))
 	}
-	// slog.SetDefault(logg)
+	slog.SetDefault(logg)
 
+	if config.Timer.Enabled {
+		ticker := time.NewTicker(time.Duration(config.Timer.Interval) * time.Second)
+		runTest(logg, config)
+		for {
+			<-ticker.C
+			runTest(logg, config)
+		}
+	} else {
+		runTest(logg, config)
+	}
+
+	return nil
+}
+
+func runTest(logg *slog.Logger, config *config.Config) error {
 	// logg.SetFormatter(&log.JSONFormatter{PrettyPrint: true})
+
+	testRunId := xid.New()
+	testRunStartedAt := time.Now()
 
 	logger := logg.With("testRunId", testRunId)
 
 	// TODO we will make a new client for each ICE Server URL from each provider
 	// get ICE servers and loop them
-	ICEServers, err := client.GetIceServers(config)
+	ICEServers, node, err := client.GetIceServers(config, logger, testRunId)
 	if err != nil {
-		logger.Error("Error getting ICE servers")
+		logger.Error("Error getting ICE servers", "err", err)
 		//this should be a fatal
+	}
+
+	if node != "" {
+		config.NodeID = node
 	}
 
 	config.Registry = prometheus.NewRegistry()
@@ -188,17 +251,22 @@ func runService(ctx *cli.Context) error {
 	// }
 	// end TEST
 
+	var results []*stats.Stats
+
 	for provider, iss := range ICEServers {
 		providerLogger := logger.With("Provider", provider)
 
 		providerLogger.Info("Provider Starting")
 
-		for _, is := range iss {
+		for _, is := range iss.IceServers {
+
+			providerLogger.Info("URL is", "url", is)
 
 			iceServerInfo, err := stun.ParseURI(is.URLs[0])
 
 			if err != nil {
-				return err
+				providerLogger.Error("Error parsing ICE Server URL", "err", err)
+				continue
 			}
 
 			runId := xid.New()
@@ -225,7 +293,9 @@ func runService(ctx *cli.Context) error {
 			}
 
 			timer := time.NewTimer(testDuration)
-			c, err := client.NewClient(config, iceServerInfo, provider, testRunId, testRunStartedAt)
+			close := make(chan struct{})
+
+			c, err := client.NewClient(config, iceServerInfo, provider, testRunId, testRunStartedAt, iss.DoThroughput, close)
 			if err != nil {
 				return err
 			}
@@ -233,14 +303,20 @@ func runService(ctx *cli.Context) error {
 			iceServerLogger.Info("Calling Run()")
 			c.Run()
 			iceServerLogger.Info("Called Run(), waiting for timer", "seconds", testDuration.Seconds())
-			<-timer.C
+			select {
+			case <-close:
+				timer.Stop()
+			case <-timer.C:
+			}
 			iceServerLogger.Info("Calling Stop()")
 			c.Stop()
 			<-time.After(1 * time.Second)
 			iceServerLogger.Info("Finished")
+			results = append(results, c.Stats)
 		}
 		providerLogger.Info("Provider Finished")
 	}
+
 	logger.Info("Finished Test Run")
 
 	// c, err := client.NewClient(config)
@@ -318,7 +394,19 @@ func runService(ctx *cli.Context) error {
 	// 	logger.Info("Wrote stats to prom")
 
 	// }
+	if !config.Logging.Loki.Enabled && !config.Logging.API.Enabled {
+		headerFmt := color.New(color.FgGreen, color.Underline).SprintfFunc()
+		columnFmt := color.New(color.FgYellow).SprintfFunc()
 
+		tbl := table.New("Provider", "Scheme", "Time to candidate", "Max Throughput", "TURN Transfer Latency")
+		tbl.WithHeaderFormatter(headerFmt).WithFirstColumnFormatter(columnFmt)
+
+		for _, st := range results {
+			tbl.AddRow(st.Provider, st.Scheme, st.OffererTimeToReceiveCandidate, st.ThroughputMax, st.LatencyFirstPacket)
+		}
+
+		tbl.Print()
+	}
 	return nil
 }
 
@@ -336,6 +424,31 @@ func getConfig(c *cli.Context) (*config.Config, error) {
 	conf, err := config.NewConfig(configBody)
 	if err != nil {
 		return nil, err
+	}
+
+	//if we got passed in the api host and the api key then overwrite the config
+	//same for timer mode
+	if c.String("api-uri") != "" {
+		conf.Api.Enabled = true
+		conf.Api.URI = c.String("api-uri")
+	}
+
+	if c.String("api-key") != "" {
+		conf.Api.Enabled = true
+		conf.Api.ApiKey = c.String("api-key")
+	}
+
+	if conf.Api.Enabled && conf.Api.URI == "" {
+		conf.Api.URI = "https://api.iceperf.com/api/settings"
+	}
+
+	if c.Bool("timer") {
+		conf.Timer.Enabled = true
+		conf.Timer.Interval = 60
+	}
+
+	if conf.Api.Enabled && conf.Api.ApiKey != "" && conf.Api.URI != "" {
+		conf.UpdateConfigFromApi()
 	}
 
 	return conf, nil
