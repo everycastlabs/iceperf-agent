@@ -183,6 +183,7 @@ jobs:
         project_path: "./cmd/iceperf"
         overwrite: true
         asset_name: iceperf-agent-${{ matrix.goos }}-${{ matrix.goarch }}
+        extra_files: README.md iceperf.sh LICENSE
 
     # - name: Build
     #   run: go build -o ${{ matrix.binary-name }} ./cmd/iceperf
