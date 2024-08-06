@@ -1,4 +1,19 @@
 #!/bin/bash
+function usage() {
+ cat << _EOF_
+Usage: ${0} "apikey" (where apikey is your... apikey =) )
+
+_EOF_
+}
+
+#-- check arguments and environment
+if [ "$#" -ne "1" ]; then
+  echo "Expected 1 argument, got $#" >&2
+  usage
+  exit 2
+fi
+
+APIKEY=$1
 
 # Determine the architecture
 arch=$(uname -m)
@@ -55,7 +70,7 @@ fi
 
 echo "Calling $binary_name with API Key"
 # Run the binary with the api key
-./"$binary_name" --api-key="your-api-key"
+./"$binary_name" --api-key="${1}"
 
 # Clean up
 rm -f "$local_file"
