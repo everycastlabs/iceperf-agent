@@ -2,14 +2,14 @@
 
 # Determine the architecture
 arch=$(uname -m)
-
+os=$(uname -s | tr '[:upper:]' '[:lower:]')
 # Set the appropriate file names and URLs based on the architecture
 case "$arch" in
     x86_64)
-        asset_name="iceperf-agent-linux-amd64.tar.gz"
+        asset_name="iceperf-agent-$os-amd64.tar.gz"
         ;;
     arm64)
-        asset_name="iceperf-agent-linux-arm64.tar.gz"
+        asset_name="iceperf-agent-$os-arm64.tar.gz"
         ;;
     *)
         echo "Unsupported architecture: $arch"
