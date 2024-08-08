@@ -14,8 +14,10 @@ type Stats struct {
 	OffererTimeToReceiveCandidate          float64           `json:"offererTimeToReceiveCandidate"`
 	OffererDcBytesSentTotal                float64           `json:"offererDcBytesSentTotal"`
 	OffererIceTransportBytesSentTotal      float64           `json:"offererIceTransportBytesSentTotal"`
+	OffererIceTransportBytesReceivedTotal  float64           `json:"offererIceTransportBytesReceivedTotal"`
 	AnswererDcBytesReceivedTotal           float64           `json:"answererDcBytesReceivedTotal"`
 	AnswererIceTransportBytesReceivedTotal float64           `json:"answererIceTransportBytesReceivedTotal"`
+	AnswererIceTransportBytesSentTotal     float64           `json:"answererIceTransportBytesSentTotal"`
 	LatencyFirstPacket                     float64           `json:"latencyFirstPacket"`
 	Throughput                             map[int64]float64 `json:"throughput"`
 	ThroughputMax                          float64           `json:"throughputMax"`
@@ -82,12 +84,20 @@ func (s *Stats) SetOffererIceTransportBytesSentTotal(io float64) {
 	s.OffererIceTransportBytesSentTotal = io
 }
 
+func (s *Stats) SetOffererIceTransportBytesReceivedTotal(io float64) {
+	s.OffererIceTransportBytesReceivedTotal = io
+}
+
 func (s *Stats) SetAnswererDcBytesReceivedTotal(a float64) {
 	s.AnswererDcBytesReceivedTotal = a
 }
 
 func (s *Stats) SetAnswererIceTransportBytesReceivedTotal(ia float64) {
 	s.AnswererIceTransportBytesReceivedTotal = ia
+}
+
+func (s *Stats) SetAnswererIceTransportBytesSentTotal(ia float64) {
+	s.AnswererIceTransportBytesSentTotal = ia
 }
 
 func (s *Stats) SetLatencyFirstPacket(l float64) {

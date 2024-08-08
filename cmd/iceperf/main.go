@@ -79,7 +79,7 @@ func runService(ctx *cli.Context) error {
 	}
 
 	lvl := new(slog.LevelVar)
-	lvl.Set(slog.LevelInfo)
+	lvl.Set(slog.LevelError)
 
 	// Configure the logger
 
