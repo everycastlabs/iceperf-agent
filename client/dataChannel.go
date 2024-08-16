@@ -177,7 +177,7 @@ func (cp *ConnectionPair) createOfferer(config webrtc.Configuration) {
 
 		dc.OnClose(func() {
 
-			dcBytesSentTotal, iceTransportSentBytesTotal, iceTransportReceivedBytesTotal, _ := getBytesSent(pc, dc)
+			dcBytesSentTotal, _, iceTransportSentBytesTotal, iceTransportReceivedBytesTotal, _ := getBytesStats(pc, dc)
 
 			cp.stats.SetOffererDcBytesSentTotal(float64(dcBytesSentTotal))
 			cp.stats.SetOffererIceTransportBytesSentTotal(float64(iceTransportSentBytesTotal))
@@ -253,7 +253,7 @@ func (cp *ConnectionPair) createAnswerer(config webrtc.Configuration) {
 					cp.LogAnswerer.Info("Received first Packet", "latencyFirstPacketInMs", time.Since(cp.sentInitialMessageViaDC).Milliseconds())
 					hasReceivedData = true
 				}
-				totalBytesReceivedTmp, _, _, ok := getBytesReceived(pc, dc)
+				_, totalBytesReceivedTmp, _, _, ok := getBytesStats(pc, dc)
 				if ok {
 					totalBytesReceived = totalBytesReceivedTmp
 					// cp.LogAnswerer.Info("Received Bytes So Far", "dcReceivedBytes", totalBytesReceivedTmp,
@@ -267,12 +267,11 @@ func (cp *ConnectionPair) createAnswerer(config webrtc.Configuration) {
 
 			dc.OnClose(func() {
 
-				dcBytesReceivedTotal, iceTransportBytesReceivedTotal, iceTransportBytesSentTotal, _ := getBytesReceived(pc, dc)
+				_, dcBytesReceivedTotal, iceTransportBytesReceivedTotal, iceTransportBytesSentTotal, _ := getBytesStats(pc, dc)
 
 				cp.stats.SetAnswererDcBytesReceivedTotal(float64(dcBytesReceivedTotal))
 				cp.stats.SetAnswererIceTransportBytesReceivedTotal(float64(iceTransportBytesReceivedTotal))
 				cp.stats.SetAnswererIceTransportBytesSentTotal(float64(iceTransportBytesSentTotal))
-
 
 				cp.LogAnswerer.Info("Received total", "dcReceivedBytesTotal", dcBytesReceivedTotal,
 					"iceTransportReceivedBytesTotal", iceTransportBytesReceivedTotal)
@@ -283,28 +282,25 @@ func (cp *ConnectionPair) createAnswerer(config webrtc.Configuration) {
 	cp.AnswerPC = pc
 }
 
-func getBytesReceived(pc *webrtc.PeerConnection, dc *webrtc.DataChannel) (uint64, uint64, uint64, bool) {
+func getBytesStats(pc *webrtc.PeerConnection, dc *webrtc.DataChannel) (uint64, uint64, uint64, uint64, bool) {
+
 	stats := pc.GetStats()
+
+	// for _, report := range stats {
+	// 	//if candidatePairStats, ok := report.(webrtc.ICECandidatePairStats); ok {
+	// 	// Check if this candidate pair is the selected one
+	// 	// if candidatePairStats.Nominated {
+	// 	// fmt.Printf("WebRTC Stat: %+v\n", report)
+	// 	//			}
+	// 	//}
+	// }
 
 	dcStats, ok := stats.GetDataChannelStats(dc)
 	if !ok {
-		return 0, 0, 0, ok
+		return 0, 0, 0, 0, ok
 	}
 
 	iceTransportStats := stats["iceTransport"].(webrtc.TransportStats)
 
-	return dcStats.BytesReceived, iceTransportStats.BytesReceived, iceTransportStats.BytesSent, ok
-}
-
-func getBytesSent(pc *webrtc.PeerConnection, dc *webrtc.DataChannel) (uint64, uint64, uint64, bool) {
-	stats := pc.GetStats()
-
-	dcStats, ok := stats.GetDataChannelStats(dc)
-	if !ok {
-		return 0, 0, 0, ok
-	}
-
-	iceTransportStats := stats["iceTransport"].(webrtc.TransportStats)
-
-	return dcStats.BytesSent, iceTransportStats.BytesSent, iceTransportStats.BytesReceived, ok
+	return dcStats.BytesSent, dcStats.BytesReceived, iceTransportStats.BytesSent, iceTransportStats.BytesReceived, ok
 }

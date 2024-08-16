@@ -33,7 +33,8 @@ type CloudflareResponse struct {
 func (d *Driver) GetIceServers() (adapters.IceServersConfig, error) {
 
 	iceServers := adapters.IceServersConfig{
-		IceServers: []webrtc.ICEServer{},
+		IceServers:   []webrtc.ICEServer{},
+		DoThroughput: d.Config.DoThroughput,
 	}
 
 	if d.Config.RequestUrl != "" {

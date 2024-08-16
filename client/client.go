@@ -18,11 +18,6 @@ import (
 	// log "github.com/sirupsen/logrus"
 )
 
-const (
-	bufferedAmountLowThreshold uint64 = 512 * 1024  // 512 KB
-	maxBufferedAmount          uint64 = 1024 * 1024 // 1 MB
-)
-
 var (
 	startTime                     time.Time
 	timeAnswererReceivedCandidate time.Time
@@ -31,6 +26,8 @@ var (
 	timeAnswererConnected         time.Time
 	timeOffererConnecting         time.Time
 	timeOffererConnected          time.Time
+	bufferedAmountLowThreshold    uint64 = 512 * 1024
+	maxBufferedAmount             uint64 = 1024 * 1024 // 1 MiB
 )
 
 type Client struct {
@@ -62,6 +59,11 @@ func newClient(cc *config.Config, iceServerInfo *stun.URI, provider string, test
 	stats.SetNode(cc.NodeID)
 
 	connectionPair, err := newConnectionPair(cc, iceServerInfo, provider, stats, doThroughputTest, close)
+
+	if doThroughputTest {
+		bufferedAmountLowThreshold = 4 * 1024 * 1024 // 4 Mib
+		maxBufferedAmount = 8 * 1024 * 1024          // 8 Mib
+	}
 
 	if err != nil {
 		return nil, err
