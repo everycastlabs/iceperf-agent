@@ -37,6 +37,12 @@ case "$arch" in
         ;;
 esac
 
+# Check if wget exists
+if ! command -v wget >/dev/null 2>&1; then
+  echo "wget is not installed. Please install it."
+  exit 1
+fi
+
 asset_url="https://github.com/nimbleape/iceperf-agent/releases/latest/download/$asset_name"
 md5_url="$asset_url.md5"
 local_file="$asset_name"
@@ -49,10 +55,13 @@ rm -f "$local_file" || true
 remote_md5=$(wget -qO- "$md5_url")
 
 # Extract the MD5 hash from the downloaded file
-current_md5=$(cat current.md5)
+if [ -f current.md5 ]; then
+  current_md5=$(cat current.md5)
+else
+  current_md5=""
+fi
 
 # Compare the hashes
-touch current.md5
 echo "Current MD5 is $current_md5"
 echo "Remote MD5 is $remote_md5"
 
@@ -72,6 +81,8 @@ else
     # Make the binary executable
     chmod +x "$binary_name"
 fi
+
+touch current.md5
 
 echo "Calling $binary_name with API Key"
 # Run the binary with the api key

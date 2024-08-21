@@ -47,7 +47,7 @@ iceperf --api-key="foo"
 None yet.
 
 ### Flags
-- `--config` or `-c` to specify the path for the config `.yaml` file (required)
+- `--config` or `-c` to specify the path for the config `.yaml` file
 - `-h` or `--help` for the help menu
 - `-v` or `--version` for the app version
 - `--api-uri` or `-a` to specify the API URI
