@@ -221,27 +221,40 @@ func (cp *ConnectionPair) createAnswerer(config webrtc.Configuration) {
 
 				since := time.Now()
 
+				lastTotalBytesReceived := uint64(0)
 				// Start printing out the observed throughput
 				for range time.NewTicker(100 * time.Millisecond).C {
 					//check if this pc is closed and break out
 					if pc.ConnectionState() != webrtc.PeerConnectionStateConnected {
 						break
 					}
-					bps := 8 * float64(totalBytesReceived) / float64(time.Since(since).Seconds())
+					_, totalBytesReceivedTmp, _, _, ok := getBytesStats(pc, dc)
+					if ok {
+						totalBytesReceived = totalBytesReceivedTmp
+						// cp.LogAnswerer.Info("Received Bytes So Far", "dcReceivedBytes", totalBytesReceivedTmp,
+						// 	"cpReceivedBytes", cpTotalBytesReceivedTmp)
+					}
+
+					bytesLastTicker := totalBytesReceived - lastTotalBytesReceived
+
+					bps := 8 * float64(bytesLastTicker) * 10
+					lastTotalBytesReceived = totalBytesReceivedTmp
+
+					averageBps := 8 * float64(totalBytesReceived) / float64(time.Since(since).Seconds())
 					// bps := float64(atomic.LoadUint64(&totalBytesReceived)*8) / time.Since(since).Seconds()
-					cp.LogAnswerer.Info("On ticker: Calculated throughput", "throughput", bps/1024/1024,
-						"eventTime", time.Now())
+					cp.LogAnswerer.Info("On ticker: Calculated throughput", "bytesLastTicker", bytesLastTicker, "throughput", bps/1024/1024, "avgthroughput", averageBps/1024/1024, "eventTime", time.Now())
 					if cp.doThroughputTest {
-						cp.stats.AddThroughput(time.Since(since).Milliseconds(), bps/1024/1024)
+						cp.stats.AddThroughput(time.Since(since).Milliseconds(), averageBps/1024/1024, bps/1024/1024)
 					}
 				}
+
 				bps := 8 * float64(totalBytesReceived) / float64(time.Since(since).Seconds())
 				// bps := float64(atomic.LoadUint64(&totalBytesReceived)*8) / time.Since(since).Seconds()
 				cp.LogAnswerer.Info("On ticker: Calculated throughput", "throughput", bps/1024/1024,
 					"eventTime", time.Now(),
 					"timeSinceStartMs", time.Since(since).Milliseconds())
 				if cp.doThroughputTest {
-					cp.stats.AddThroughput(time.Since(since).Milliseconds(), bps/1024/1024)
+					cp.stats.AddThroughput(time.Since(since).Milliseconds(), bps/1024/1024, 0)
 				}
 			})
 
@@ -252,12 +265,6 @@ func (cp *ConnectionPair) createAnswerer(config webrtc.Configuration) {
 					cp.stats.SetLatencyFirstPacket(float64(time.Since(cp.sentInitialMessageViaDC).Milliseconds()))
 					cp.LogAnswerer.Info("Received first Packet", "latencyFirstPacketInMs", time.Since(cp.sentInitialMessageViaDC).Milliseconds())
 					hasReceivedData = true
-				}
-				_, totalBytesReceivedTmp, _, _, ok := getBytesStats(pc, dc)
-				if ok {
-					totalBytesReceived = totalBytesReceivedTmp
-					// cp.LogAnswerer.Info("Received Bytes So Far", "dcReceivedBytes", totalBytesReceivedTmp,
-					// 	"cpReceivedBytes", cpTotalBytesReceivedTmp)
 				}
 				if !cp.doThroughputTest {
 					cp.LogAnswerer.Info("Sending to close")

@@ -20,6 +20,7 @@ type Stats struct {
 	AnswererIceTransportBytesSentTotal     float64           `json:"answererIceTransportBytesSentTotal"`
 	LatencyFirstPacket                     float64           `json:"latencyFirstPacket"`
 	Throughput                             map[int64]float64 `json:"throughput"`
+	InstantThroughput                      map[int64]float64 `json:"instantThroughput"`
 	ThroughputMax                          float64           `json:"throughputMax"`
 	TestRunStartedAt                       time.Time         `json:"testRunStartedAt"`
 	Provider                               string            `json:"provider"`
@@ -34,10 +35,11 @@ type Stats struct {
 // NewStats creates a new Stats object with a given test run ID
 func NewStats(testRunID string, testRunStartedAt time.Time) *Stats {
 	s := &Stats{
-		TestRunID:        testRunID,
-		TestRunStartedAt: testRunStartedAt,
-		Throughput:       make(map[int64]float64), // Initialize the Throughput map
-		Connected:        false,
+		TestRunID:         testRunID,
+		TestRunStartedAt:  testRunStartedAt,
+		Throughput:        make(map[int64]float64), // Initialize the Throughput map
+		InstantThroughput: make(map[int64]float64), // Initialize the Throughput map
+		Connected:         false,
 	}
 
 	return s
@@ -112,12 +114,18 @@ func (s *Stats) setThroughputMax(l float64) {
 	s.ThroughputMax = l
 }
 
-func (s *Stats) AddThroughput(tp int64, v float64) {
-	s.setThroughputMax(v)
+func (s *Stats) AddThroughput(tp int64, v float64, v2 float64) {
+	s.setThroughputMax(v2)
 	if _, ok := s.Throughput[tp]; !ok {
 		s.Throughput[tp] = v
 	} else {
 		s.Throughput[tp] += v
+	}
+
+	if _, ok := s.InstantThroughput[tp]; !ok {
+		s.InstantThroughput[tp] = v2
+	} else {
+		s.InstantThroughput[tp] += v2
 	}
 }
 
