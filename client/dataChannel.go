@@ -35,11 +35,11 @@ type ConnectionPair struct {
 	closeChan               chan struct{}
 }
 
-func NewConnectionPair(config *config.Config, iceServerInfo *stun.URI, provider string, stats *stats.Stats, doThroughputTest bool, closeChan chan struct{}) (c *ConnectionPair, err error) {
-	return newConnectionPair(config, iceServerInfo, provider, stats, doThroughputTest, closeChan)
+func NewConnectionPair(config *config.Config, iceServerInfo *stun.URI, provider string, stats *stats.Stats, doThroughputTest bool, doTurnToTurn bool, closeChan chan struct{}) (c *ConnectionPair, err error) {
+	return newConnectionPair(config, iceServerInfo, provider, stats, doThroughputTest, doTurnToTurn, closeChan)
 }
 
-func newConnectionPair(cc *config.Config, iceServerInfo *stun.URI, provider string, stats *stats.Stats, doThroughputTest bool, closeChan chan struct{}) (*ConnectionPair, error) {
+func newConnectionPair(cc *config.Config, iceServerInfo *stun.URI, provider string, stats *stats.Stats, doThroughputTest bool, doTurnToTurn bool, closeChan chan struct{}) (*ConnectionPair, error) {
 	logOfferer := cc.Logger.With("peer", "Offerer")
 	logAnswerer := cc.Logger.With("peer", "Answerer")
 
@@ -66,16 +66,20 @@ func newConnectionPair(cc *config.Config, iceServerInfo *stun.URI, provider stri
 	//we only want offerer to force turn (if we are)
 	cp.createOfferer(config)
 
-	// think we want to leave the answerer without any ice servers so we only get the host candidates.... I think
-	// to get the tests working I'm passing the turn server into both....
-	// but I don't think that should be required
-	cp.createAnswerer(webrtc.Configuration{
-		ICEServers: []webrtc.ICEServer{
-			{
-				URLs: []string{"stun:stun.l.google.com:19302"},
+	if doTurnToTurn {
+		cp.createAnswerer(config)
+	} else {
+		// think we want to leave the answerer without any ice servers so we only get the host candidates.... I think
+		// to get the tests working I'm passing the turn server into both....
+		// but I don't think that should be required
+		cp.createAnswerer(webrtc.Configuration{
+			ICEServers: []webrtc.ICEServer{
+				{
+					URLs: []string{"stun:stun.l.google.com:19302"},
+				},
 			},
-		},
-	})
+		})
+	}
 
 	return cp, nil
 }

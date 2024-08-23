@@ -29,6 +29,7 @@ type ICEConfig struct {
 	StunEnabled  bool             `yaml:"stun_enabled"`
 	TurnEnabled  bool             `yaml:"turn_enabled"`
 	DoThroughput bool             `yaml:"do_throughput"`
+	TurnToTurn   bool             `yaml:"turn_to_turn"`
 }
 
 type LokiConfig struct {

@@ -295,7 +295,7 @@ func runTest(logg *slog.Logger, config *config.Config) error {
 			timer := time.NewTimer(testDuration)
 			close := make(chan struct{})
 
-			c, err := client.NewClient(config, iceServerInfo, provider, testRunId, testRunStartedAt, iss.DoThroughput, close)
+			c, err := client.NewClient(config, iceServerInfo, provider, testRunId, testRunStartedAt, iss.DoThroughput, iss.TurnToTurn, close)
 			if err != nil {
 				return err
 			}
