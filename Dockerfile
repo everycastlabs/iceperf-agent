@@ -1,4 +1,4 @@
-FROM golang:1.22.5-bullseye AS builder
+FROM golang:1.22-alpine AS builder
 
 WORKDIR /app
 
@@ -8,17 +8,13 @@ RUN go mod download
 
 COPY . .
 
-RUN go build -o /iceperf-agent cmd/iceperf/main.go
+RUN CGO_ENABLED=0 ldflags="-s -w" go build -o /iceperf-agent cmd/iceperf/main.go
 
-FROM debian:bullseye-slim
+FROM gcr.io/distroless/static
 
 WORKDIR /
 
-RUN apt-get update && apt-get install -y ca-certificates
-
 COPY --from=builder /iceperf-agent .
-
-RUN ls -lsa /
 
 ENTRYPOINT ["./iceperf-agent"]
 CMD ["-h"]
