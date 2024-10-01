@@ -41,11 +41,11 @@ type Client struct {
 	config            *config.Config
 }
 
-func NewClient(config *config.Config, iceServerInfo *stun.URI, provider string, testRunId xid.ID, testRunStartedAt time.Time, doThroughputTest bool, close chan struct{}) (c *Client, err error) {
-	return newClient(config, iceServerInfo, provider, testRunId, testRunStartedAt, doThroughputTest, close)
+func NewClient(config *config.Config, iceServerInfo *stun.URI, provider string, testRunId xid.ID, testRunStartedAt time.Time, doThroughputTest bool, doTurnToTurn bool, close chan struct{}) (c *Client, err error) {
+	return newClient(config, iceServerInfo, provider, testRunId, testRunStartedAt, doThroughputTest, doTurnToTurn, close)
 }
 
-func newClient(cc *config.Config, iceServerInfo *stun.URI, provider string, testRunId xid.ID, testRunStartedAt time.Time, doThroughputTest bool, close chan struct{}) (*Client, error) {
+func newClient(cc *config.Config, iceServerInfo *stun.URI, provider string, testRunId xid.ID, testRunStartedAt time.Time, doThroughputTest bool, doTurnToTurn bool, close chan struct{}) (*Client, error) {
 
 	// Start timers
 	startTime = time.Now()
@@ -58,7 +58,7 @@ func newClient(cc *config.Config, iceServerInfo *stun.URI, provider string, test
 	stats.SetPort(fmt.Sprintf("%d", iceServerInfo.Port))
 	stats.SetNode(cc.NodeID)
 
-	connectionPair, err := newConnectionPair(cc, iceServerInfo, provider, stats, doThroughputTest, close)
+	connectionPair, err := newConnectionPair(cc, iceServerInfo, provider, stats, doThroughputTest, doTurnToTurn, close)
 
 	if doThroughputTest {
 		bufferedAmountLowThreshold = 4 * 1024 * 1024 // 4 Mib

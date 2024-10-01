@@ -35,6 +35,7 @@ func (d *Driver) GetIceServers() (adapters.IceServersConfig, error) {
 	iceServers := adapters.IceServersConfig{
 		IceServers:   []webrtc.ICEServer{},
 		DoThroughput: d.Config.DoThroughput,
+		TurnToTurn:   d.Config.TurnToTurn,
 	}
 
 	if d.Config.RequestUrl != "" {
