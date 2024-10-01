@@ -23,13 +23,16 @@ func formGenericIceServers(config *config.ICEConfig) (adapters.IceServersConfig,
 	iceServers := []webrtc.ICEServer{}
 	if config.StunEnabled {
 		for proto, ports := range config.StunPorts {
+			query := ""
+			if !config.StunUseRFC7094URI {
+				query = fmt.Sprintf("?transport=%s", proto)
+			}
 			for _, port := range ports {
 				stunProto := "stun"
 				if proto == "tls" {
 					stunProto = "stuns"
 				}
-				url := fmt.Sprintf("%s:%s:%d?transport=%s",
-					stunProto, config.StunHost, port, proto)
+				url := fmt.Sprintf("%s:%s:%d%s", stunProto, config.StunHost, port, query)
 
 				iceServers = append(iceServers,
 					webrtc.ICEServer{

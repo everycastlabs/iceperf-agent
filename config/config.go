@@ -14,21 +14,22 @@ import (
 )
 
 type ICEConfig struct {
-	Username     string           `yaml:"username,omitempty"`
-	Password     string           `yaml:"password,omitempty"`
-	ApiKey       string           `json:"apiKey,omitempty" yaml:"api_key,omitempty"`
-	AccountSid   string           `yaml:"account_sid,omitempty"`
-	RequestUrl   string           `json:"requestUrl,omitempty" yaml:"request_url,omitempty"`
-	HttpUsername string           `yaml:"http_username"`
-	HttpPassword string           `yaml:"http_password"`
-	Enabled      bool             `yaml:"enabled"`
-	StunHost     string           `yaml:"stun_host,omitempty"`
-	TurnHost     string           `yaml:"turn_host,omitempty"`
-	TurnPorts    map[string][]int `yaml:"turn_ports,omitempty"`
-	StunPorts    map[string][]int `yaml:"stun_ports,omitempty"`
-	StunEnabled  bool             `yaml:"stun_enabled"`
-	TurnEnabled  bool             `yaml:"turn_enabled"`
-	DoThroughput bool             `yaml:"do_throughput"`
+	Username          string           `yaml:"username,omitempty"`
+	Password          string           `yaml:"password,omitempty"`
+	ApiKey            string           `json:"apiKey,omitempty" yaml:"api_key,omitempty"`
+	AccountSid        string           `yaml:"account_sid,omitempty"`
+	RequestUrl        string           `json:"requestUrl,omitempty" yaml:"request_url,omitempty"`
+	HttpUsername      string           `yaml:"http_username"`
+	HttpPassword      string           `yaml:"http_password"`
+	Enabled           bool             `yaml:"enabled"`
+	StunUseRFC7094URI bool             `yaml:"stun_use_rfc7094_uri"`
+	StunHost          string           `yaml:"stun_host,omitempty"`
+	TurnHost          string           `yaml:"turn_host,omitempty"`
+	TurnPorts         map[string][]int `yaml:"turn_ports,omitempty"`
+	StunPorts         map[string][]int `yaml:"stun_ports,omitempty"`
+	StunEnabled       bool             `yaml:"stun_enabled"`
+	TurnEnabled       bool             `yaml:"turn_enabled"`
+	DoThroughput      bool             `yaml:"do_throughput"`
 }
 
 type LokiConfig struct {
