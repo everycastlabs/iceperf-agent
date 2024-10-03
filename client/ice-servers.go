@@ -1,6 +1,7 @@
 package client
 
 import (
+	"fmt"
 	"log/slog"
 
 	"github.com/nimbleape/iceperf-agent/adapters"
@@ -19,7 +20,58 @@ import (
 )
 
 func formGenericIceServers(config *config.ICEConfig) (adapters.IceServersConfig, error) {
-	return adapters.IceServersConfig{}, nil
+	iceServers := []webrtc.ICEServer{}
+	if config.StunEnabled {
+		for proto, ports := range config.StunPorts {
+			query := ""
+			if !config.StunUseRFC7094URI {
+				query = fmt.Sprintf("?transport=%s", proto)
+			}
+			for _, port := range ports {
+				stunProto := "stun"
+				if proto == "tls" {
+					stunProto = "stuns"
+				}
+				url := fmt.Sprintf("%s:%s:%d%s", stunProto, config.StunHost, port, query)
+
+				iceServers = append(iceServers,
+					webrtc.ICEServer{
+						URLs:           []string{url},
+						Username:       config.Username,
+						Credential:     config.Password,
+						CredentialType: webrtc.ICECredentialTypePassword,
+					})
+
+			}
+		}
+	}
+	if config.TurnEnabled {
+		for proto, ports := range config.TurnPorts {
+			for _, port := range ports {
+				turnProto := "turn"
+				if proto == "tls" {
+					turnProto = "turns"
+				}
+				url := fmt.Sprintf("%s:%s:%d?transport=%s",
+					turnProto, config.TurnHost, port, proto)
+
+				iceServers = append(iceServers,
+					webrtc.ICEServer{
+						URLs:           []string{url},
+						Username:       config.Username,
+						Credential:     config.Password,
+						CredentialType: webrtc.ICECredentialTypePassword,
+					})
+			}
+		}
+
+	}
+	c := adapters.IceServersConfig{
+		IceServers:   iceServers,
+		DoThroughput: config.DoThroughput,
+	}
+
+	return c, nil
 }
 
 type IceServersConfig struct {
