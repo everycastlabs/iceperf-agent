@@ -49,11 +49,17 @@ func formGenericIceServers(config *config.ICEConfig) (adapters.IceServersConfig,
 		for proto, ports := range config.TurnPorts {
 			for _, port := range ports {
 				turnProto := "turn"
+				l4proto := proto
 				if proto == "tls" {
 					turnProto = "turns"
+					l4proto = "tcp"
+				}
+				if proto == "dtls" {
+					turnProto = "turns"
+					l4proto = "udp"
 				}
 				url := fmt.Sprintf("%s:%s:%d?transport=%s",
-					turnProto, config.TurnHost, port, proto)
+					turnProto, config.TurnHost, port, l4proto)
 
 				iceServers = append(iceServers,
 					webrtc.ICEServer{
