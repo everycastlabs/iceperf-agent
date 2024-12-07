@@ -48,15 +48,6 @@ func NewClient(config *config.Config, iceServerInfo *stun.URI, provider string, 
 
 func newClient(cc *config.Config, iceServerInfo *stun.URI, provider string, testRunId xid.ID, testRunStartedAt time.Time, doThroughputTest bool, close chan struct{}) (*Client, error) {
 
-	// Perform a DNS query to cache the DNS if config is set
-	if cc.ICEConfig[provider].DNSQueryEnabled {
-		dnsQueryDuration, err := performDNSQuery(iceServerInfo.Host)
-		if err != nil {
-			return nil, err
-		}
-		cc.Logger.Info("DNS query completed", "dnsQueryDuration", dnsQueryDuration)
-	}
-
 	// Start timers
 	startTime = time.Now()
 
@@ -306,7 +297,7 @@ func (c *Client) Stop() error {
 // Run a simple DNS query and return the duration and error
 // This function will make sure that the DNS is cached and subsequent
 // STUN and TURN sessions are not affected by the DNS query time
-func performDNSQuery(hostname string) (time.Duration, error) {
+func PerformDNSQuery(hostname string) (time.Duration, error) {
     start := time.Now()
     _, err := net.LookupIP(hostname)
     duration := time.Since(start)
