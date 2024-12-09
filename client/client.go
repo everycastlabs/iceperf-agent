@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"time"
 
@@ -291,4 +292,14 @@ func (c *Client) Stop() error {
 	c.Logger.Info(j, "individual_test_completed", "true")
 
 	return nil
+}
+
+// Run a simple DNS query and return the duration and error
+// This function will make sure that the DNS is cached and subsequent
+// STUN and TURN sessions are not affected by the DNS query time
+func PerformDNSQuery(hostname string) (time.Duration, error) {
+    start := time.Now()
+    _, err := net.LookupIP(hostname)
+    duration := time.Since(start)
+    return duration, err
 }

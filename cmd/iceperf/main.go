@@ -271,6 +271,28 @@ func runTest(logg *slog.Logger, config *config.Config) error {
 
 			runId := xid.New()
 
+			// If config is set, we do a DNS test first to cache the IP address
+			if config.ICEConfig[provider].DNSQueryEnabled {
+				providerLogger.Info("Starting DNS Query")
+				dnsQueryDuration, err := client.PerformDNSQuery(iceServerInfo.Host)
+				if err != nil {
+					providerLogger.Error("Error quering DNS", "err", err)
+					continue
+				}
+				providerLogger.Info("DNS query completed", "dnsQueryDuration", dnsQueryDuration)
+				dnsStats := stats.NewStats(runId.String(), testRunStartedAt)
+
+				dnsStats.SetProvider(provider)
+				dnsStats.SetScheme(iceServerInfo.Scheme.String())
+				dnsStats.SetProtocol("dns")
+				dnsStats.SetPort("53")
+				dnsStats.SetNode(config.NodeID)
+
+				dnsStats.SetOffererTimeToReceiveCandidate(float64(dnsQueryDuration.Milliseconds()))
+
+				results = append(results, dnsStats)
+			}
+
 			iceServerLogger := providerLogger.With("iceServerTestRunId", runId,
 				"schemeAndProtocol", iceServerInfo.Scheme.String()+"-"+iceServerInfo.Proto.String(),
 			)
