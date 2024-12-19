@@ -398,11 +398,11 @@ func runTest(logg *slog.Logger, config *config.Config) error {
 	headerFmt := color.New(color.FgGreen, color.Underline).SprintfFunc()
 	columnFmt := color.New(color.FgYellow).SprintfFunc()
 
-	tbl := table.New("Provider", "Scheme", "Protocol", "Time to candidate", "Max Throughput", "TURN Transfer Latency")
+	tbl := table.New("Provider", "Scheme", "Protocol", "Time to candidate", "Max Throughput", "TURN Transfer Latency", "Time to Connected State")
 	tbl.WithHeaderFormatter(headerFmt).WithFirstColumnFormatter(columnFmt)
 
 	for _, st := range results {
-		tbl.AddRow(st.Provider, st.Scheme, st.Protocol, st.OffererTimeToReceiveCandidate, st.ThroughputMax, st.LatencyFirstPacket)
+		tbl.AddRow(st.Provider, st.Scheme, st.Protocol, st.OffererTimeToReceiveCandidate, st.ThroughputMax, st.LatencyFirstPacket, st.TimeToConnectedState)
 	}
 
 	tbl.Print()
