@@ -30,6 +30,7 @@ type ICEConfig struct {
 	StunEnabled       bool             `yaml:"stun_enabled"`
 	TurnEnabled       bool             `yaml:"turn_enabled"`
 	DoThroughput      bool             `yaml:"do_throughput"`
+	DNSQueryEnabled   bool             `yaml:"dns_query_enabled,omitempty"`
 }
 
 type LokiConfig struct {
