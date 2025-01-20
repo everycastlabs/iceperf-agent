@@ -87,9 +87,11 @@ func newClient(cc *config.Config, iceServerInfo *stun.URI, provider string, test
 	} else {
 		// Set ICE Candidate handler. As soon as a PeerConnection has gathered a candidate
 		// send it to the other peer
+
+		//if the test is a STUN test, then allow host, srflx and relay candidates
 		c.ConnectionPair.AnswerPC.OnICECandidate(func(i *webrtc.ICECandidate) {
 			if i != nil {
-				if i.Typ == webrtc.ICECandidateTypeSrflx || i.Typ == webrtc.ICECandidateTypeRelay {
+				if i.Typ == webrtc.ICECandidateTypeSrflx || i.Typ == webrtc.ICECandidateTypeRelay || (i.Typ == webrtc.ICECandidateTypeHost && (iceServerInfo.Scheme == stun.SchemeTypeSTUN || iceServerInfo.Scheme == stun.SchemeTypeSTUNS)) {
 					stats.SetAnswererTimeToReceiveCandidate(float64(time.Since(startTime).Milliseconds()))
 					timeAnswererReceivedCandidate = time.Now()
 					c.ConnectionPair.LogAnswerer.Info("Answerer received candidate, sent over to other PC", "eventTime", timeAnswererReceivedCandidate,
