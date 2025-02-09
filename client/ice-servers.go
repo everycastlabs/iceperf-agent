@@ -11,6 +11,7 @@ import (
 	"github.com/nimbleape/iceperf-agent/adapters/expressturn"
 	"github.com/nimbleape/iceperf-agent/adapters/google"
 	"github.com/nimbleape/iceperf-agent/adapters/metered"
+	"github.com/nimbleape/iceperf-agent/adapters/stunner"
 	"github.com/nimbleape/iceperf-agent/adapters/twilio"
 	"github.com/nimbleape/iceperf-agent/adapters/xirsys"
 	"github.com/nimbleape/iceperf-agent/config"
@@ -150,6 +151,21 @@ func GetIceServers(config *config.Config, logger *slog.Logger, testRunId xid.ID)
 			}
 			logger.Info("metered IceServers", "is", is)
 
+			iceServers[key] = is
+		case "stunner":
+			if !conf.Enabled {
+				continue
+			}
+			md := stunner.Driver{
+				Config: &conf,
+				Logger: logger,
+			}
+			is, err := md.GetIceServers()
+			if err != nil {
+				logger.Error("Error getting elixir ice servers")
+				return nil, "", err
+			}
+			logger.Info("STUNner IceServers", "is", is)
 			iceServers[key] = is
 		case "twilio":
 			if !conf.Enabled {
