@@ -7,7 +7,6 @@ import (
 
 	"github.com/nimbleape/iceperf-agent/config"
 	"github.com/nimbleape/iceperf-agent/stats"
-	"github.com/nimbleape/iceperf-agent/util"
 	"github.com/pion/stun/v2"
 	"github.com/pion/webrtc/v4"
 )
@@ -80,14 +79,14 @@ func newConnectionPair(cc *config.Config, iceServerInfo *stun.URI, provider stri
 	return cp, nil
 }
 
-func (cp *ConnectionPair) setRemoteDescription(pc *webrtc.PeerConnection, sdp []byte) {
+func (cp *ConnectionPair) setRemoteDescription(pc *webrtc.PeerConnection, sdp []byte) error {
 	var desc webrtc.SessionDescription
-	err := json.Unmarshal(sdp, &desc)
-	util.Check(err)
+	if err := json.Unmarshal(sdp, &desc); err != nil {
+		return err
+	}
 
 	// Apply the desc as the remote description
-	err = pc.SetRemoteDescription(desc)
-	util.Check(err)
+	return pc.SetRemoteDescription(desc)
 }
 
 func (cp *ConnectionPair) createOfferer(config webrtc.Configuration) {
@@ -97,7 +96,10 @@ func (cp *ConnectionPair) createOfferer(config webrtc.Configuration) {
 	api := webrtc.NewAPI(webrtc.WithSettingEngine(settingEngine))
 
 	pc, err := api.NewPeerConnection(config)
-	util.Check(err)
+	if err != nil {
+		cp.LogOfferer.Error("failed to create offerer peer connection", "error", err)
+		return
+	}
 
 	buf := make([]byte, 1024)
 
@@ -114,7 +116,10 @@ func (cp *ConnectionPair) createOfferer(config webrtc.Configuration) {
 
 	// Create a datachannel with label 'data'
 	dc, err := pc.CreateDataChannel("data", options)
-	util.Check(err)
+	if err != nil {
+		cp.LogOfferer.Error("failed to create data channel", "error", err)
+		return
+	}
 
 	cp.OfferDC = dc
 
@@ -197,7 +202,10 @@ func (cp *ConnectionPair) createAnswerer(config webrtc.Configuration) {
 	// api := webrtc.NewAPI(webrtc.WithSettingEngine(settingEngine))
 	// Create a new PeerConnection
 	pc, err := webrtc.NewPeerConnection(config)
-	util.Check(err)
+	if err != nil {
+		cp.LogAnswerer.Error("failed to create answerer peer connection", "error", err)
+		return
+	}
 
 	if cp.iceServerInfo.Scheme == stun.SchemeTypeTURN || cp.iceServerInfo.Scheme == stun.SchemeTypeTURNS {
 

@@ -10,7 +10,6 @@ import (
 
 	"github.com/nimbleape/iceperf-agent/config"
 	"github.com/nimbleape/iceperf-agent/stats"
-	"github.com/nimbleape/iceperf-agent/util"
 	"github.com/pion/stun/v2"
 	"github.com/pion/webrtc/v4"
 	"github.com/rs/xid"
@@ -98,7 +97,9 @@ func newClient(cc *config.Config, iceServerInfo *stun.URI, provider string, test
 						"candidateType", i.Typ,
 						"relayAddress", i.RelatedAddress,
 						"relayPort", i.RelatedPort)
-					util.Check(c.ConnectionPair.OfferPC.AddICECandidate(i.ToJSON()))
+					if err := c.ConnectionPair.OfferPC.AddICECandidate(i.ToJSON()); err != nil {
+						c.ConnectionPair.LogOfferer.Error("failed to add ICE candidate to offerer", "error", err)
+					}
 				}
 			}
 		})
@@ -115,7 +116,9 @@ func newClient(cc *config.Config, iceServerInfo *stun.URI, provider string, test
 						"candidateType", i.Typ,
 						"relayAddress", i.RelatedAddress,
 						"relayPort", i.RelatedPort)
-					util.Check(c.ConnectionPair.AnswerPC.AddICECandidate(i.ToJSON()))
+					if err := c.ConnectionPair.AnswerPC.AddICECandidate(i.ToJSON()); err != nil {
+						c.ConnectionPair.LogAnswerer.Error("failed to add ICE candidate to answerer", "error", err)
+					}
 				}
 			}
 		})
@@ -210,25 +213,51 @@ func (c *Client) Run() {
 
 func (c *Client) run() {
 	offer, err := c.ConnectionPair.OfferPC.CreateOffer(nil)
-	util.Check(err)
-	util.Check(c.ConnectionPair.OfferPC.SetLocalDescription(offer))
+	if err != nil {
+		c.Logger.Error("failed to create offer", "error", err)
+		return
+	}
+	if err := c.ConnectionPair.OfferPC.SetLocalDescription(offer); err != nil {
+		c.Logger.Error("failed to set local description", "error", err)
+		return
+	}
 	desc, err := json.Marshal(offer)
-	util.Check(err)
+	if err != nil {
+		c.Logger.Error("failed to marshal offer", "error", err)
+		return
+	}
 
-	c.ConnectionPair.setRemoteDescription(c.ConnectionPair.AnswerPC, desc)
+	if err := c.ConnectionPair.setRemoteDescription(c.ConnectionPair.AnswerPC, desc); err != nil {
+		c.Logger.Error("failed to set remote description on answerer", "error", err)
+		return
+	}
 
 	answer, err := c.ConnectionPair.AnswerPC.CreateAnswer(nil)
-	util.Check(err)
-	util.Check(c.ConnectionPair.AnswerPC.SetLocalDescription(answer))
+	if err != nil {
+		c.Logger.Error("failed to create answer", "error", err)
+		return
+	}
+	if err := c.ConnectionPair.AnswerPC.SetLocalDescription(answer); err != nil {
+		c.Logger.Error("failed to set local description on answerer", "error", err)
+		return
+	}
 	desc2, err := json.Marshal(answer)
-	util.Check(err)
+	if err != nil {
+		c.Logger.Error("failed to marshal answer", "error", err)
+		return
+	}
 
-	c.ConnectionPair.setRemoteDescription(c.ConnectionPair.OfferPC, desc2)
+	if err := c.ConnectionPair.setRemoteDescription(c.ConnectionPair.OfferPC, desc2); err != nil {
+		c.Logger.Error("failed to set remote description on offerer", "error", err)
+		return
+	}
 
 	// this is blocking
 	c.close <- struct{}{}
 
-	util.Check(c.Stop())
+	if err := c.Stop(); err != nil {
+		c.Logger.Error("failed to stop client", "error", err)
+	}
 }
 
 func (c *Client) Stop() error {
