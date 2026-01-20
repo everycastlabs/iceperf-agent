@@ -313,8 +313,12 @@ func (c *Client) Stop() error {
 			fmt.Printf("Failed to send data. Status code: %d\n", resp.StatusCode)
 		}
 	}
-	j, _ := c.Stats.ToJSON()
-	c.Logger.Info(j, "individual_test_completed", "true")
+	j, err := c.Stats.ToJSON()
+	if err != nil {
+		c.Logger.Error("failed to convert stats to JSON", "error", err)
+	} else {
+		c.Logger.Info(j, "individual_test_completed", "true")
+	}
 
 	return nil
 }
