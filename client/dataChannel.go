@@ -32,6 +32,8 @@ type ConnectionPair struct {
 	stats                   *stats.Stats
 	doThroughputTest        bool
 	closeChan               chan struct{}
+	bufferedAmountLowThreshold uint64
+	maxBufferedAmount          uint64
 }
 
 func NewConnectionPair(config *config.Config, iceServerInfo *stun.URI, provider string, stats *stats.Stats, doThroughputTest bool, closeChan chan struct{}) (c *ConnectionPair, err error) {
@@ -42,15 +44,25 @@ func newConnectionPair(cc *config.Config, iceServerInfo *stun.URI, provider stri
 	logOfferer := cc.Logger.With("peer", "Offerer")
 	logAnswerer := cc.Logger.With("peer", "Answerer")
 
+	bufferedAmountLowThreshold := uint64(512 * 1024) // 512 KB default
+	maxBufferedAmount := uint64(1024 * 1024)         // 1 MB default
+	
+	if doThroughputTest {
+		bufferedAmountLowThreshold = 4 * 1024 * 1024 // 4 MB for throughput tests
+		maxBufferedAmount = 8 * 1024 * 1024          // 8 MB for throughput tests
+	}
+
 	cp := &ConnectionPair{
-		config:           cc,
-		LogOfferer:       logOfferer,
-		LogAnswerer:      logAnswerer,
-		iceServerInfo:    iceServerInfo,
-		provider:         provider,
-		stats:            stats,
-		doThroughputTest: doThroughputTest,
-		closeChan:        closeChan,
+		config:                    cc,
+		LogOfferer:                logOfferer,
+		LogAnswerer:               logAnswerer,
+		iceServerInfo:             iceServerInfo,
+		provider:                  provider,
+		stats:                     stats,
+		doThroughputTest:          doThroughputTest,
+		closeChan:                 closeChan,
+		bufferedAmountLowThreshold: bufferedAmountLowThreshold,
+		maxBufferedAmount:          maxBufferedAmount,
 	}
 
 	config := webrtc.Configuration{}
@@ -155,7 +167,7 @@ func (cp *ConnectionPair) createOfferer(config webrtc.Configuration) {
 					break
 				}
 
-				if dc.BufferedAmount() > maxBufferedAmount {
+				if dc.BufferedAmount() > cp.maxBufferedAmount {
 					// Wait until the bufferedAmount becomes lower than the threshold
 					<-sendMoreCh
 				}
@@ -164,7 +176,7 @@ func (cp *ConnectionPair) createOfferer(config webrtc.Configuration) {
 
 		// Set bufferedAmountLowThreshold so that we can get notified when
 		// we can send more
-		dc.SetBufferedAmountLowThreshold(bufferedAmountLowThreshold)
+		dc.SetBufferedAmountLowThreshold(cp.bufferedAmountLowThreshold)
 
 		// This callback is made when the current bufferedAmount becomes lower than the threshold
 		dc.OnBufferedAmountLow(func() {

@@ -17,18 +17,6 @@ import (
 	// log "github.com/sirupsen/logrus"
 )
 
-var (
-	startTime                     time.Time
-	timeAnswererReceivedCandidate time.Time
-	timeOffererReceivedCandidate  time.Time
-	timeAnswererConnecting        time.Time
-	timeAnswererConnected         time.Time
-	timeOffererConnecting         time.Time
-	timeOffererConnected          time.Time
-	bufferedAmountLowThreshold    uint64 = 512 * 1024
-	maxBufferedAmount             uint64 = 1024 * 1024 // 1 MiB
-)
-
 type Client struct {
 	ConnectionPair    *ConnectionPair
 	OffererConnected  chan bool
@@ -38,6 +26,15 @@ type Client struct {
 	provider          string
 	Stats             *stats.Stats
 	config            *config.Config
+	
+	// Timing state (moved from package-level variables to prevent race conditions)
+	startTime                     time.Time
+	timeAnswererReceivedCandidate time.Time
+	timeOffererReceivedCandidate  time.Time
+	timeAnswererConnecting        time.Time
+	timeAnswererConnected         time.Time
+	timeOffererConnecting         time.Time
+	timeOffererConnected          time.Time
 }
 
 func NewClient(config *config.Config, iceServerInfo *stun.URI, provider string, testRunId xid.ID, testRunStartedAt time.Time, doThroughputTest bool, close chan struct{}) (c *Client, err error) {
@@ -47,7 +44,7 @@ func NewClient(config *config.Config, iceServerInfo *stun.URI, provider string, 
 func newClient(cc *config.Config, iceServerInfo *stun.URI, provider string, testRunId xid.ID, testRunStartedAt time.Time, doThroughputTest bool, close chan struct{}) (*Client, error) {
 
 	// Start timers
-	startTime = time.Now()
+	startTime := time.Now()
 
 	stats := stats.NewStats(testRunId.String(), testRunStartedAt)
 
@@ -58,11 +55,6 @@ func newClient(cc *config.Config, iceServerInfo *stun.URI, provider string, test
 	stats.SetNode(cc.NodeID)
 
 	connectionPair, err := newConnectionPair(cc, iceServerInfo, provider, stats, doThroughputTest, close)
-
-	if doThroughputTest {
-		bufferedAmountLowThreshold = 4 * 1024 * 1024 // 4 Mib
-		maxBufferedAmount = 8 * 1024 * 1024          // 8 Mib
-	}
 
 	if err != nil {
 		return nil, err
@@ -77,6 +69,7 @@ func newClient(cc *config.Config, iceServerInfo *stun.URI, provider string, test
 		provider:          provider,
 		Stats:             stats,
 		config:            cc,
+		startTime:         startTime,
 	}
 
 	if cc.OnICECandidate != nil {
@@ -90,10 +83,10 @@ func newClient(cc *config.Config, iceServerInfo *stun.URI, provider string, test
 		c.ConnectionPair.AnswerPC.OnICECandidate(func(i *webrtc.ICECandidate) {
 			if i != nil {
 				if i.Typ == webrtc.ICECandidateTypeSrflx || i.Typ == webrtc.ICECandidateTypeRelay || (i.Typ == webrtc.ICECandidateTypeHost && (iceServerInfo.Scheme == stun.SchemeTypeSTUN || iceServerInfo.Scheme == stun.SchemeTypeSTUNS)) {
-					stats.SetAnswererTimeToReceiveCandidate(float64(time.Since(startTime).Milliseconds()))
-					timeAnswererReceivedCandidate = time.Now()
-					c.ConnectionPair.LogAnswerer.Info("Answerer received candidate, sent over to other PC", "eventTime", timeAnswererReceivedCandidate,
-						"timeSinceStartMs", time.Since(startTime).Milliseconds(),
+					stats.SetAnswererTimeToReceiveCandidate(float64(time.Since(c.startTime).Milliseconds()))
+					c.timeAnswererReceivedCandidate = time.Now()
+					c.ConnectionPair.LogAnswerer.Info("Answerer received candidate, sent over to other PC", "eventTime", c.timeAnswererReceivedCandidate,
+						"timeSinceStartMs", time.Since(c.startTime).Milliseconds(),
 						"candidateType", i.Typ,
 						"relayAddress", i.RelatedAddress,
 						"relayPort", i.RelatedPort)
@@ -109,10 +102,10 @@ func newClient(cc *config.Config, iceServerInfo *stun.URI, provider string, test
 		c.ConnectionPair.OfferPC.OnICECandidate(func(i *webrtc.ICECandidate) {
 			if i != nil {
 				if i.Typ == webrtc.ICECandidateTypeSrflx || i.Typ == webrtc.ICECandidateTypeRelay {
-					stats.SetOffererTimeToReceiveCandidate(float64(time.Since(startTime).Milliseconds()))
-					timeOffererReceivedCandidate = time.Now()
-					c.ConnectionPair.LogOfferer.Info("Offerer received candidate, sent over to other PC", "eventTime", timeOffererReceivedCandidate,
-						"timeSinceStartMs", time.Since(startTime).Milliseconds(),
+					stats.SetOffererTimeToReceiveCandidate(float64(time.Since(c.startTime).Milliseconds()))
+					c.timeOffererReceivedCandidate = time.Now()
+					c.ConnectionPair.LogOfferer.Info("Offerer received candidate, sent over to other PC", "eventTime", c.timeOffererReceivedCandidate,
+						"timeSinceStartMs", time.Since(c.startTime).Milliseconds(),
 						"candidateType", i.Typ,
 						"relayAddress", i.RelatedAddress,
 						"relayPort", i.RelatedPort)
@@ -136,12 +129,12 @@ func newClient(cc *config.Config, iceServerInfo *stun.URI, provider string, test
 
 			switch s {
 			case webrtc.PeerConnectionStateConnecting:
-				timeOffererConnecting = time.Now()
-				c.ConnectionPair.LogOfferer.Info("Offerer connecting", "eventTime", timeOffererConnecting,
-					"timeSinceStartMs", time.Since(startTime).Milliseconds())
+				c.timeOffererConnecting = time.Now()
+				c.ConnectionPair.LogOfferer.Info("Offerer connecting", "eventTime", c.timeOffererConnecting,
+					"timeSinceStartMs", time.Since(c.startTime).Milliseconds())
 			case webrtc.PeerConnectionStateConnected:
-				timeOffererConnected = time.Now()
-				c.ConnectionPair.LogOfferer.Info("Offerer connected", "eventTime", timeOffererConnected, "timeSinceStartMs", time.Since(startTime).Milliseconds())
+				c.timeOffererConnected = time.Now()
+				c.ConnectionPair.LogOfferer.Info("Offerer connected", "eventTime", c.timeOffererConnected, "timeSinceStartMs", time.Since(c.startTime).Milliseconds())
 				//go and get the details about the ice pair
 				//stats := c.ConnectionPair.OfferPC.GetStats()
 				// connStats, ok := stats.GetConnectionStats(c.ConnectionPair.OfferPC)
@@ -161,18 +154,18 @@ func newClient(cc *config.Config, iceServerInfo *stun.URI, provider string, test
 				// 		"timeSinceStartMs": time.Since(startTime).Milliseconds(),
 				// 	}).Info("Offerer Stats")
 				// }
-				stats.SetTimeToConnectedState(time.Since(startTime).Milliseconds())
+				stats.SetTimeToConnectedState(time.Since(c.startTime).Milliseconds())
 				c.OffererConnected <- true
 			case webrtc.PeerConnectionStateFailed:
 				// Wait until PeerConnection has had no network activity for 30 seconds or another failure. It may be reconnected using an ICE Restart.
 				// Use webrtc.PeerConnectionStateDisconnected if you are interested in detecting faster timeout.
 				// Note that the PeerConnection may come back from PeerConnectionStateDisconnected.
-				c.ConnectionPair.LogOfferer.Error("Offerer connection failed", "eventTime", time.Now(), "timeSinceStartMs", time.Since(startTime).Milliseconds())
+				c.ConnectionPair.LogOfferer.Error("Offerer connection failed", "eventTime", time.Now(), "timeSinceStartMs", time.Since(c.startTime).Milliseconds())
 				close <- struct{}{}
 				c.OffererConnected <- false
 			case webrtc.PeerConnectionStateClosed:
 				// PeerConnection was explicitly closed. This usually happens from a DTLS CloseNotify
-				c.ConnectionPair.LogOfferer.Info("Offerer connection closed", "eventTime", time.Now(), "timeSinceStartMs", time.Since(startTime).Milliseconds())
+				c.ConnectionPair.LogOfferer.Info("Offerer connection closed", "eventTime", time.Now(), "timeSinceStartMs", time.Since(c.startTime).Milliseconds())
 				c.OffererConnected <- false
 			}
 		})
@@ -184,21 +177,21 @@ func newClient(cc *config.Config, iceServerInfo *stun.URI, provider string, test
 
 			switch s {
 			case webrtc.PeerConnectionStateConnecting:
-				timeAnswererConnecting = time.Now()
-				c.ConnectionPair.LogAnswerer.Info("Answerer connecting", "eventTime", timeAnswererConnecting, "timeSinceStartMs", time.Since(startTime).Milliseconds())
+				c.timeAnswererConnecting = time.Now()
+				c.ConnectionPair.LogAnswerer.Info("Answerer connecting", "eventTime", c.timeAnswererConnecting, "timeSinceStartMs", time.Since(c.startTime).Milliseconds())
 			case webrtc.PeerConnectionStateConnected:
-				timeAnswererConnected = time.Now()
-				c.ConnectionPair.LogAnswerer.Info("Answerer connected", "eventTime", timeAnswererConnected, "timeSinceStartMs", time.Since(startTime).Milliseconds())
+				c.timeAnswererConnected = time.Now()
+				c.ConnectionPair.LogAnswerer.Info("Answerer connected", "eventTime", c.timeAnswererConnected, "timeSinceStartMs", time.Since(c.startTime).Milliseconds())
 				c.AnswererConnected <- true
 			case webrtc.PeerConnectionStateFailed:
 				// Wait until PeerConnection has had no network activity for 30 seconds or another failure. It may be reconnected using an ICE Restart.
 				// Use webrtc.PeerConnectionStateDisconnected if you are interested in detecting faster timeout.
 				// Note that the PeerConnection may come back from PeerConnectionStateDisconnected.
-				c.ConnectionPair.LogAnswerer.Error("Answerer connection failed", "eventTime", time.Now(), "timeSinceStartMs", time.Since(startTime).Milliseconds())
+				c.ConnectionPair.LogAnswerer.Error("Answerer connection failed", "eventTime", time.Now(), "timeSinceStartMs", time.Since(c.startTime).Milliseconds())
 				c.AnswererConnected <- false
 			case webrtc.PeerConnectionStateClosed:
 				// PeerConnection was explicitly closed. This usually happens from a DTLS CloseNotify
-				c.ConnectionPair.LogAnswerer.Info("Answerer connection closed", "eventTime", time.Now(), "timeSinceStartMs", time.Since(startTime).Milliseconds())
+				c.ConnectionPair.LogAnswerer.Info("Answerer connection closed", "eventTime", time.Now(), "timeSinceStartMs", time.Since(c.startTime).Milliseconds())
 				c.AnswererConnected <- false
 			}
 		})
