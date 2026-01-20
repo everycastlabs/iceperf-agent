@@ -347,7 +347,15 @@ func getBytesStats(pc *webrtc.PeerConnection, dc *webrtc.DataChannel) (uint64, u
 		return 0, 0, 0, 0, ok
 	}
 
-	iceTransportStats := stats["iceTransport"].(webrtc.TransportStats)
+	iceTransportStatsRaw, ok := stats["iceTransport"]
+	if !ok {
+		return 0, 0, 0, 0, false
+	}
 
-	return dcStats.BytesSent, dcStats.BytesReceived, iceTransportStats.BytesSent, iceTransportStats.BytesReceived, ok
+	iceTransportStats, ok := iceTransportStatsRaw.(webrtc.TransportStats)
+	if !ok {
+		return 0, 0, 0, 0, false
+	}
+
+	return dcStats.BytesSent, dcStats.BytesReceived, iceTransportStats.BytesSent, iceTransportStats.BytesReceived, true
 }
