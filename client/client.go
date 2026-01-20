@@ -296,7 +296,9 @@ func (c *Client) Stop() error {
 		req.Header.Add("Authorization", "Bearer "+c.config.Logging.API.ApiKey)
 
 		// Send the request using the HTTP client
-		client := &http.Client{}
+		client := &http.Client{
+			Timeout: 30 * time.Second,
+		}
 		resp, err := client.Do(req)
 		if err != nil {
 			fmt.Println("Error sending request:", err)

@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"reflect"
+	"time"
 
 	"github.com/pion/webrtc/v4"
 	"github.com/prometheus/client_golang/prometheus"
@@ -133,7 +134,9 @@ func NewConfig(confString string) (*Config, error) {
 }
 
 func (c *Config) UpdateConfigFromApi() error {
-	httpClient := &http.Client{}
+	httpClient := &http.Client{
+		Timeout: 30 * time.Second,
+	}
 
 	req, err := http.NewRequest("GET", c.Api.URI, nil)
 	req.Header.Add("Content-Type", "application/json")

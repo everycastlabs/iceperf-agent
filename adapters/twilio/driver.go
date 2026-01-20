@@ -7,6 +7,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"time"
 
 	"github.com/nimbleape/iceperf-agent/adapters"
 	"github.com/nimbleape/iceperf-agent/config"
@@ -36,7 +37,9 @@ type TwilioResponse struct {
 }
 
 func (d *Driver) GetIceServers() (adapters.IceServersConfig, error) {
-	client := &http.Client{}
+	client := &http.Client{
+		Timeout: 30 * time.Second,
+	}
 
 	iceServers := adapters.IceServersConfig{
 		IceServers: []webrtc.ICEServer{},

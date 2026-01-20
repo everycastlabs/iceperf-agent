@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/nimbleape/iceperf-agent/adapters"
 	"github.com/nimbleape/iceperf-agent/config"
@@ -39,7 +40,9 @@ func (d *Driver) GetIceServers() (adapters.IceServersConfig, error) {
 
 	if d.Config.RequestUrl != "" {
 
-		client := &http.Client{}
+		client := &http.Client{
+			Timeout: 30 * time.Second,
+		}
 
 		req, err := http.NewRequest("POST", d.Config.RequestUrl, strings.NewReader(`{"ttl": 86400}`))
 		req.Header.Add("Content-Type", "application/json")

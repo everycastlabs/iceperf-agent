@@ -7,6 +7,7 @@ import (
     "io"
     "log/slog"
     "net/http"
+    "time"
 
     "github.com/nimbleape/iceperf-agent/adapters"
     "github.com/nimbleape/iceperf-agent/config"
@@ -41,7 +42,9 @@ func (d *Driver) GetIceServers() (adapters.IceServersConfig, error) {
         DoThroughput: d.Config.DoThroughput,
     }
 
-    client := &http.Client{}
+    client := &http.Client{
+        Timeout: 30 * time.Second,
+    }
     req, err := http.NewRequest("GET", d.Config.RequestUrl, nil)
 
     if err != nil {
