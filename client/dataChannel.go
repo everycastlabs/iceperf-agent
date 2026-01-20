@@ -11,14 +11,6 @@ import (
 	"github.com/pion/webrtc/v4"
 )
 
-type PC struct {
-	pc *webrtc.PeerConnection
-}
-
-func (pc *PC) Stop() {
-
-}
-
 type ConnectionPair struct {
 	OfferPC                 *webrtc.PeerConnection
 	OfferDC                 *webrtc.DataChannel
@@ -251,7 +243,7 @@ func (cp *ConnectionPair) createAnswerer(config webrtc.Configuration) {
 				for {
 					select {
 					case <-ticker.C:
-						//check if this pc is closed and break out
+					//check if this pc is closed and break out
 						connState := pc.ConnectionState()
 						if connState != webrtc.PeerConnectionStateConnected {
 							// Calculate final throughput before returning
@@ -264,34 +256,34 @@ func (cp *ConnectionPair) createAnswerer(config webrtc.Configuration) {
 								cp.stats.AddThroughput(time.Since(since).Milliseconds(), bps/1024/1024, 0)
 							}
 							return
-						}
-						_, totalBytesReceivedTmp, _, _, ok := getBytesStats(pc, dc)
-						if ok {
-							totalBytesReceived = totalBytesReceivedTmp
-							// cp.LogAnswerer.Info("Received Bytes So Far", "dcReceivedBytes", totalBytesReceivedTmp,
-							// 	"cpReceivedBytes", cpTotalBytesReceivedTmp)
-						}
+					}
+					_, totalBytesReceivedTmp, _, _, ok := getBytesStats(pc, dc)
+					if ok {
+						totalBytesReceived = totalBytesReceivedTmp
+						// cp.LogAnswerer.Info("Received Bytes So Far", "dcReceivedBytes", totalBytesReceivedTmp,
+						// 	"cpReceivedBytes", cpTotalBytesReceivedTmp)
+					}
 
-						bytesLastTicker := totalBytesReceived - lastTotalBytesReceived
+					bytesLastTicker := totalBytesReceived - lastTotalBytesReceived
 
-						bps := 8 * float64(bytesLastTicker) * 10
-						lastTotalBytesReceived = totalBytesReceivedTmp
+					bps := 8 * float64(bytesLastTicker) * 10
+					lastTotalBytesReceived = totalBytesReceivedTmp
 
-						averageBps := 8 * float64(totalBytesReceived) / float64(time.Since(since).Seconds())
-						// bps := float64(atomic.LoadUint64(&totalBytesReceived)*8) / time.Since(since).Seconds()
-						cp.LogAnswerer.Info("On ticker: Calculated throughput", "bytesLastTicker", bytesLastTicker, "throughput", bps/1024/1024, "avgthroughput", averageBps/1024/1024, "eventTime", time.Now())
-						if cp.doThroughputTest {
-							cp.stats.AddThroughput(time.Since(since).Milliseconds(), averageBps/1024/1024, bps/1024/1024)
-						}
+					averageBps := 8 * float64(totalBytesReceived) / float64(time.Since(since).Seconds())
+					// bps := float64(atomic.LoadUint64(&totalBytesReceived)*8) / time.Since(since).Seconds()
+					cp.LogAnswerer.Info("On ticker: Calculated throughput", "bytesLastTicker", bytesLastTicker, "throughput", bps/1024/1024, "avgthroughput", averageBps/1024/1024, "eventTime", time.Now())
+					if cp.doThroughputTest {
+						cp.stats.AddThroughput(time.Since(since).Milliseconds(), averageBps/1024/1024, bps/1024/1024)
+					}
 					case <-cp.closeChan:
 						// Cleanup when close signal received
 						// Calculate final throughput before returning
-						bps := 8 * float64(totalBytesReceived) / float64(time.Since(since).Seconds())
+				bps := 8 * float64(totalBytesReceived) / float64(time.Since(since).Seconds())
 						cp.LogAnswerer.Info("On ticker: Final calculated throughput", "throughput", bps/1024/1024,
-							"eventTime", time.Now(),
-							"timeSinceStartMs", time.Since(since).Milliseconds())
-						if cp.doThroughputTest {
-							cp.stats.AddThroughput(time.Since(since).Milliseconds(), bps/1024/1024, 0)
+					"eventTime", time.Now(),
+					"timeSinceStartMs", time.Since(since).Milliseconds())
+				if cp.doThroughputTest {
+					cp.stats.AddThroughput(time.Since(since).Milliseconds(), bps/1024/1024, 0)
 						}
 						return
 					}
