@@ -67,8 +67,7 @@ func (d *Driver) GetIceServers(testRunId xid.ID) (map[string]adapters.IceServers
 		defer res.Body.Close()
 		//check the code of the response
 		if res.StatusCode != 200 {
-			err = errors.New("error from our api")
-			return providersAndIceServers, "", err
+			return providersAndIceServers, "", fmt.Errorf("API request failed with status %d: %w", res.StatusCode, errors.New("non-200 status code"))
 		}
 
 		responseData, err := io.ReadAll(res.Body)

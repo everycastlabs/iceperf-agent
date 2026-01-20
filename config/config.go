@@ -154,8 +154,7 @@ func (c *Config) UpdateConfigFromApi() error {
 	defer res.Body.Close()
 	//check the code of the response
 	if res.StatusCode != 200 {
-		err = errors.New("error from our api " + res.Status)
-		return err
+		return fmt.Errorf("API request failed with status %s: %w", res.Status, errors.New("non-200 status code"))
 	}
 
 	responseData, err := io.ReadAll(res.Body)

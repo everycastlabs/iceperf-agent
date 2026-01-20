@@ -26,7 +26,7 @@ type Client struct {
 	provider          string
 	Stats             *stats.Stats
 	config            *config.Config
-	
+
 	// Timing state (moved from package-level variables to prevent race conditions)
 	startTime                     time.Time
 	timeAnswererReceivedCandidate time.Time
