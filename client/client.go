@@ -277,7 +277,7 @@ func (c *Client) Stop() error {
 		c.Stats.CreateLabels()
 		jsonData, err := json.Marshal(c.Stats)
 		if err != nil {
-			fmt.Println("Error marshalling JSON:", err)
+			c.Logger.Error("failed to marshal stats to JSON", "error", err)
 			return err
 		}
 
@@ -287,7 +287,7 @@ func (c *Client) Stop() error {
 		// Create a new HTTP request
 		req, err := http.NewRequest("POST", apiEndpoint, bytes.NewBuffer(jsonData))
 		if err != nil {
-			fmt.Println("Error creating request:", err)
+			c.Logger.Error("failed to create HTTP request", "error", err, "endpoint", apiEndpoint)
 			return err
 		}
 
@@ -301,16 +301,16 @@ func (c *Client) Stop() error {
 		}
 		resp, err := client.Do(req)
 		if err != nil {
-			fmt.Println("Error sending request:", err)
+			c.Logger.Error("failed to send HTTP request", "error", err, "endpoint", apiEndpoint)
 			return err
 		}
 		defer resp.Body.Close()
 
 		// Check the response
 		if resp.StatusCode == http.StatusCreated {
-			fmt.Println("Data sent successfully!")
+			c.Logger.Info("stats data sent successfully to API", "endpoint", apiEndpoint)
 		} else {
-			fmt.Printf("Failed to send data. Status code: %d\n", resp.StatusCode)
+			c.Logger.Warn("failed to send stats data to API", "statusCode", resp.StatusCode, "endpoint", apiEndpoint)
 		}
 	}
 	j, err := c.Stats.ToJSON()

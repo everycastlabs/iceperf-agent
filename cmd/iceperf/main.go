@@ -67,14 +67,15 @@ func main() {
 	}
 
 	if err := app.Run(os.Args); err != nil {
-		fmt.Println(err)
+		slog.Error("application error", "error", err)
+		os.Exit(1)
 	}
 }
 
 func runService(ctx *cli.Context) error {
 	config, err := getConfig(ctx)
 	if err != nil {
-		fmt.Println("Error loading config")
+		slog.Error("failed to load config", "error", err)
 		return err
 	}
 
