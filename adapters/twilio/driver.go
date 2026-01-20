@@ -3,6 +3,7 @@ package twilio
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -78,7 +79,9 @@ func (d *Driver) GetIceServers() (adapters.IceServersConfig, error) {
 	}
 
 	responseServers := TwilioResponse{}
-	json.Unmarshal([]byte(responseData), &responseServers)
+	if err := json.Unmarshal([]byte(responseData), &responseServers); err != nil {
+		return iceServers, fmt.Errorf("failed to unmarshal twilio API response: %w", err)
+	}
 
 	tempTurnHost := ""
 

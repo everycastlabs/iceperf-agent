@@ -3,6 +3,7 @@ package config
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -159,7 +160,9 @@ func (c *Config) UpdateConfigFromApi() error {
 		return err
 	}
 	responseConfig := Config{}
-	json.Unmarshal([]byte(responseData), &responseConfig)
+	if err := json.Unmarshal([]byte(responseData), &responseConfig); err != nil {
+		return fmt.Errorf("failed to unmarshal API response: %w", err)
+	}
 
 	//go and merge in values from the API into the config
 

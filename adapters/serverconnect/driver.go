@@ -2,6 +2,7 @@ package serverconnect
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 )
@@ -30,7 +31,9 @@ func (d Driver) Connect() (connected bool, err error) {
 	}
 
 	var responseServers []map[string]interface{}
-	json.Unmarshal([]byte(responseData), &responseServers)
+	if err := json.Unmarshal([]byte(responseData), &responseServers); err != nil {
+		return false, fmt.Errorf("failed to unmarshal serverconnect API response: %w", err)
+	}
 
 	return len(responseServers) > 0, nil
 }

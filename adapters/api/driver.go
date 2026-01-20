@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -77,7 +78,9 @@ func (d *Driver) GetIceServers(testRunId xid.ID) (map[string]adapters.IceServers
 		// log.Info("got a response back from cloudflare api")
 
 		responseServers := ApiResponse{}
-		json.Unmarshal([]byte(responseData), &responseServers)
+		if err := json.Unmarshal([]byte(responseData), &responseServers); err != nil {
+			return providersAndIceServers, "", fmt.Errorf("failed to unmarshal API response: %w", err)
+		}
 
 		// log.WithFields(log.Fields{
 		// 	"response": responseServers,

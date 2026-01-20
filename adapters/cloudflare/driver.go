@@ -81,7 +81,9 @@ func (d *Driver) GetIceServers() (adapters.IceServersConfig, error) {
 		// log.Info("got a response back from cloudflare api")
 
 		responseServers := CloudflareResponse{}
-		json.Unmarshal([]byte(responseData), &responseServers)
+		if err := json.Unmarshal([]byte(responseData), &responseServers); err != nil {
+			return iceServers, fmt.Errorf("failed to unmarshal cloudflare API response: %w", err)
+		}
 
 		// log.WithFields(log.Fields{
 		// 	"response": responseServers,

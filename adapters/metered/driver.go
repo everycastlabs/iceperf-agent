@@ -2,6 +2,7 @@ package metered
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -50,7 +51,9 @@ func (d *Driver) GetIceServers() (adapters.IceServersConfig, error) {
 	}
 
 	var responseServers []MeteredIceServers
-	json.Unmarshal([]byte(responseData), &responseServers)
+	if err := json.Unmarshal([]byte(responseData), &responseServers); err != nil {
+		return iceServers, fmt.Errorf("failed to unmarshal metered API response: %w", err)
+	}
 
 	gotTransports := make(map[string]bool)
 

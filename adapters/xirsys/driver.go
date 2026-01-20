@@ -3,6 +3,7 @@ package xirsys
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -80,7 +81,9 @@ func (d *Driver) GetIceServers() (adapters.IceServersConfig, error) {
 	}
 
 	responseServers := XirsysResponse{}
-	json.Unmarshal([]byte(responseData), &responseServers)
+	if err := json.Unmarshal([]byte(responseData), &responseServers); err != nil {
+		return iceServers, fmt.Errorf("failed to unmarshal xirsys API response: %w", err)
+	}
 
 	gotTransports := make(map[string]bool)
 

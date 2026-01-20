@@ -3,6 +3,7 @@ package stunner
 import (
     "encoding/json"
     "errors"
+    "fmt"
     "io"
     "log/slog"
     "net/http"
@@ -77,7 +78,9 @@ func (d *Driver) GetIceServers() (adapters.IceServersConfig, error) {
     }
 
     responseServers := StunnerResponse{}
-    json.Unmarshal([]byte(responseData), &responseServers)
+    if err := json.Unmarshal([]byte(responseData), &responseServers); err != nil {
+        return iceServers, fmt.Errorf("failed to unmarshal stunner API response: %w", err)
+    }
 
     for _, server := range responseServers.IceServers {
         for _, url := range server.Urls {
