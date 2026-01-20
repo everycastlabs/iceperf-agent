@@ -208,13 +208,12 @@ func (c *Config) UpdateConfigFromApi() error {
 		return fmt.Errorf("failed to unmarshal API response: %w", err)
 	}
 
-	//go and merge in values from the API into the config
-
-	//lets just do the basics for now....
-	//this needs a lot more work
+	// Merge in values from the API into the config
 	c.NodeID = responseConfig.NodeID
 	c.ICEConfig = responseConfig.ICEConfig
 	c.Logging = responseConfig.Logging
-	// mergeConfigs(c, responseConfig)
+	if responseConfig.Timeouts.HTTPClient != 0 {
+		c.Timeouts = responseConfig.Timeouts
+	}
 	return nil
 }

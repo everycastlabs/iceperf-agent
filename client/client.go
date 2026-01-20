@@ -157,9 +157,6 @@ func newClient(cc *config.Config, iceServerInfo *stun.URI, provider string, test
 				stats.SetTimeToConnectedState(time.Since(c.startTime).Milliseconds())
 				c.OffererConnected <- true
 			case webrtc.PeerConnectionStateFailed:
-				// Wait until PeerConnection has had no network activity for 30 seconds or another failure. It may be reconnected using an ICE Restart.
-				// Use webrtc.PeerConnectionStateDisconnected if you are interested in detecting faster timeout.
-				// Note that the PeerConnection may come back from PeerConnectionStateDisconnected.
 				c.ConnectionPair.LogOfferer.Error("Offerer connection failed", "eventTime", time.Now(), "timeSinceStartMs", time.Since(c.startTime).Milliseconds())
 				close <- struct{}{}
 				c.OffererConnected <- false
@@ -317,7 +314,7 @@ func (c *Client) Stop() error {
 	if err != nil {
 		c.Logger.Error("failed to convert stats to JSON", "error", err)
 	} else {
-		c.Logger.Info(j, "individual_test_completed", "true")
+	c.Logger.Info(j, "individual_test_completed", "true")
 	}
 
 	return nil
