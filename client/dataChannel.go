@@ -96,7 +96,11 @@ func (cp *ConnectionPair) setRemoteDescription(pc *webrtc.PeerConnection, sdp []
 func (cp *ConnectionPair) createOfferer(config webrtc.Configuration) {
 	// Create a new PeerConnection
 	settingEngine := webrtc.SettingEngine{}
-	settingEngine.SetICETimeouts(5*time.Second, 10*time.Second, 2*time.Second)
+	settingEngine.SetICETimeouts(
+		cp.config.Timeouts.ICEGathering,
+		cp.config.Timeouts.ICEConnection,
+		cp.config.Timeouts.ICECheckInterval,
+	)
 	api := webrtc.NewAPI(webrtc.WithSettingEngine(settingEngine))
 
 	pc, err := api.NewPeerConnection(config)
@@ -236,7 +240,7 @@ func (cp *ConnectionPair) createAnswerer(config webrtc.Configuration) {
 				lastTotalBytesReceived := uint64(0)
 				
 				// Create ticker with proper cleanup
-				ticker := time.NewTicker(100 * time.Millisecond)
+				ticker := time.NewTicker(cp.config.Timeouts.ThroughputTicker)
 				defer ticker.Stop()
 				
 				// Start printing out the observed throughput

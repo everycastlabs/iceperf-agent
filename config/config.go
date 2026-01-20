@@ -68,12 +68,22 @@ type TimerConfig struct {
 	Interval int  `json:"interval" yaml:"interval"`
 }
 
+type TimeoutConfig struct {
+	HTTPClient      time.Duration `json:"httpClient" yaml:"http_client"`           // HTTP client timeout (default: 30s)
+	ICEGathering    time.Duration `json:"iceGathering" yaml:"ice_gathering"`       // ICE gathering timeout (default: 5s)
+	ICEConnection   time.Duration `json:"iceConnection" yaml:"ice_connection"`    // ICE connection timeout (default: 10s)
+	ICECheckInterval time.Duration `json:"iceCheckInterval" yaml:"ice_check_interval"` // ICE check interval (default: 2s)
+	ThroughputTicker time.Duration `json:"throughputTicker" yaml:"throughput_ticker"`   // Throughput stats ticker interval (default: 100ms)
+	StopDelay       time.Duration `json:"stopDelay" yaml:"stop_delay"`              // Delay before stopping connections (default: 1s)
+}
+
 type Config struct {
 	NodeID    string               `json:"nodeId" yaml:"node_id"`
 	ICEConfig map[string]ICEConfig `json:"iceServers" yaml:"ice_servers"`
 	Logging   LoggingConfig        `json:"logging" yaml:"logging"`
 	Timer     TimerConfig          `json:"timer" yaml:"timer"`
 	Api       ApiConfig            `json:"api" yaml:"api"`
+	Timeouts  TimeoutConfig        `json:"timeouts" yaml:"timeouts"`
 
 	WebRTCConfig webrtc.Configuration
 	// TODO the following should be different for answerer and offerer sides
@@ -124,18 +134,50 @@ func mergeStructs(cValue, respValue reflect.Value) {
 func NewConfig(confString string) (*Config, error) {
 	c := &Config{
 		ServiceName: "ICEPerf",
+		Timeouts: TimeoutConfig{
+			HTTPClient:      30 * time.Second,
+			ICEGathering:    5 * time.Second,
+			ICEConnection:   10 * time.Second,
+			ICECheckInterval: 2 * time.Second,
+			ThroughputTicker: 100 * time.Millisecond,
+			StopDelay:       1 * time.Second,
+		},
 	}
 	if confString != "" {
 		if err := yaml.Unmarshal([]byte(confString), c); err != nil {
 			return nil, err
 		}
 	}
+	// Ensure defaults are set if not provided in config
+	c.setTimeoutDefaults()
 	return c, nil
 }
 
+func (c *Config) setTimeoutDefaults() {
+	if c.Timeouts.HTTPClient == 0 {
+		c.Timeouts.HTTPClient = 30 * time.Second
+	}
+	if c.Timeouts.ICEGathering == 0 {
+		c.Timeouts.ICEGathering = 5 * time.Second
+	}
+	if c.Timeouts.ICEConnection == 0 {
+		c.Timeouts.ICEConnection = 10 * time.Second
+	}
+	if c.Timeouts.ICECheckInterval == 0 {
+		c.Timeouts.ICECheckInterval = 2 * time.Second
+	}
+	if c.Timeouts.ThroughputTicker == 0 {
+		c.Timeouts.ThroughputTicker = 100 * time.Millisecond
+	}
+	if c.Timeouts.StopDelay == 0 {
+		c.Timeouts.StopDelay = 1 * time.Second
+	}
+}
+
 func (c *Config) UpdateConfigFromApi() error {
+	c.setTimeoutDefaults()
 	httpClient := &http.Client{
-		Timeout: 30 * time.Second,
+		Timeout: c.Timeouts.HTTPClient,
 	}
 
 	req, err := http.NewRequest("GET", c.Api.URI, nil)

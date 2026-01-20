@@ -260,7 +260,7 @@ func (c *Client) Stop() error {
 		c.ConnectionPair.OfferDC.Close()
 	}
 
-	time.Sleep(1 * time.Second)
+	time.Sleep(c.config.Timeouts.StopDelay)
 
 	if err := c.ConnectionPair.OfferPC.Close(); err != nil {
 		c.Logger.Error("cannot close c.ConnectionPair.OfferPC", "error", err)
@@ -297,7 +297,7 @@ func (c *Client) Stop() error {
 
 		// Send the request using the HTTP client
 		client := &http.Client{
-			Timeout: 30 * time.Second,
+			Timeout: c.config.Timeouts.HTTPClient,
 		}
 		resp, err := client.Do(req)
 		if err != nil {
