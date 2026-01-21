@@ -66,13 +66,14 @@ func newConnectionPair(cc *config.Config, iceServerInfo *stun.URI, provider stri
 	config.ICETransportPolicy = cc.WebRTCConfig.ICETransportPolicy
 	config.SDPSemantics = webrtc.SDPSemanticsUnifiedPlanWithFallback
 
-	//we only want offerer to force turn (if we are)
-	cp.createOfferer(config)
+	// Only offerer should force TURN (if configured)
+	if err := cp.createOfferer(config); err != nil {
+		return nil, fmt.Errorf("failed to create offerer: %w", err)
+	}
 
-	// think we want to leave the answerer without any ice servers so we only get the host candidates.... I think
-	// to get the tests working I'm passing the turn server into both....
-	// but I don't think that should be required
-	cp.createAnswerer(webrtc.Configuration{
+	// Answerer uses minimal STUN server to get host candidates
+	// Note: Currently passing TURN server to both for testing purposes
+	if err := cp.createAnswerer(webrtc.Configuration{
 		ICEServers: []webrtc.ICEServer{
 			{
 				URLs: []string{"stun:stun.l.google.com:19302"},
