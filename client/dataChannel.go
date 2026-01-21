@@ -2,6 +2,7 @@ package client
 
 import (
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"time"
 
@@ -96,7 +97,7 @@ func (cp *ConnectionPair) setRemoteDescription(pc *webrtc.PeerConnection, sdp []
 	return pc.SetRemoteDescription(desc)
 }
 
-func (cp *ConnectionPair) createOfferer(config webrtc.Configuration) {
+func (cp *ConnectionPair) createOfferer(config webrtc.Configuration) error {
 	// Create a new PeerConnection
 	settingEngine := webrtc.SettingEngine{}
 	settingEngine.SetICETimeouts(
@@ -108,8 +109,7 @@ func (cp *ConnectionPair) createOfferer(config webrtc.Configuration) {
 
 	pc, err := api.NewPeerConnection(config)
 	if err != nil {
-		cp.LogOfferer.Error("failed to create offerer peer connection", "error", err)
-		return
+		return fmt.Errorf("failed to create offerer peer connection: %w", err)
 	}
 
 	buf := make([]byte, 1024)
@@ -128,8 +128,7 @@ func (cp *ConnectionPair) createOfferer(config webrtc.Configuration) {
 	// Create a datachannel with label 'data'
 	dc, err := pc.CreateDataChannel("data", options)
 	if err != nil {
-		cp.LogOfferer.Error("failed to create data channel", "error", err)
-		return
+		return fmt.Errorf("failed to create data channel: %w", err)
 	}
 
 	cp.OfferDC = dc
@@ -204,18 +203,14 @@ func (cp *ConnectionPair) createOfferer(config webrtc.Configuration) {
 		})
 	}
 	cp.OfferPC = pc
+	return nil
 }
 
-func (cp *ConnectionPair) createAnswerer(config webrtc.Configuration) {
-
-	// settingEngine := webrtc.SettingEngine{}
-	// settingEngine.SetICETimeouts(5, 5, 2)
-	// api := webrtc.NewAPI(webrtc.WithSettingEngine(settingEngine))
+func (cp *ConnectionPair) createAnswerer(config webrtc.Configuration) error {
 	// Create a new PeerConnection
 	pc, err := webrtc.NewPeerConnection(config)
 	if err != nil {
-		cp.LogAnswerer.Error("failed to create answerer peer connection", "error", err)
-		return
+		return fmt.Errorf("failed to create answerer peer connection: %w", err)
 	}
 
 	if cp.iceServerInfo.Scheme == stun.SchemeTypeTURN || cp.iceServerInfo.Scheme == stun.SchemeTypeTURNS {
@@ -326,6 +321,7 @@ func (cp *ConnectionPair) createAnswerer(config webrtc.Configuration) {
 	}
 
 	cp.AnswerPC = pc
+	return nil
 }
 
 func getBytesStats(pc *webrtc.PeerConnection, dc *webrtc.DataChannel) (uint64, uint64, uint64, uint64, bool) {
