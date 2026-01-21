@@ -79,7 +79,9 @@ func newConnectionPair(cc *config.Config, iceServerInfo *stun.URI, provider stri
 				URLs: []string{"stun:stun.l.google.com:19302"},
 			},
 		},
-	})
+	}); err != nil {
+		return nil, fmt.Errorf("failed to create answerer: %w", err)
+	}
 
 	return cp, nil
 }
