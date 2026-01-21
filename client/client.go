@@ -314,7 +314,7 @@ func (c *Client) Stop() error {
 	if err != nil {
 		c.Logger.Error("failed to convert stats to JSON", "error", err)
 	} else {
-	c.Logger.Info(j, "individual_test_completed", "true")
+		c.Logger.Info(j, "individual_test_completed", "true")
 	}
 
 	return nil
