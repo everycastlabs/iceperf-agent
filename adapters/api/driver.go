@@ -33,7 +33,7 @@ type ProviderRes struct {
 }
 type ApiResponse struct {
 	Providers map[string]ProviderRes `json:"providers"`
-	Node      string                 `json:"node"`
+	Node      any                    `json:"node"`
 }
 
 func (d *Driver) GetIceServers(testRunId xid.ID) (map[string]adapters.IceServersConfig, string, error) {
@@ -88,7 +88,10 @@ func (d *Driver) GetIceServers(testRunId xid.ID) (map[string]adapters.IceServers
 		// 	"response": responseServers,
 		// }).Info("http response")
 
-		node := responseServers.Node
+		node := ""
+		if responseServers.Node != nil {
+			node = fmt.Sprintf("%v", responseServers.Node)
+		}
 
 		for k, q := range responseServers.Providers {
 
