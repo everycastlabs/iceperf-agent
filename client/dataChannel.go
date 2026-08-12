@@ -236,7 +236,8 @@ func (cp *ConnectionPair) createAnswerer(config webrtc.Configuration) error {
 				since := time.Now()
 
 				lastTotalBytesReceived := uint64(0)
-				
+				lastTickTime := since
+
 				// Create ticker with proper cleanup
 				ticker := time.NewTicker(cp.config.Timeouts.ThroughputTicker)
 				defer ticker.Stop()
@@ -268,8 +269,11 @@ func (cp *ConnectionPair) createAnswerer(config webrtc.Configuration) error {
 
 					bytesLastTicker := totalBytesReceived - lastTotalBytesReceived
 
-					bps := 8 * float64(bytesLastTicker) * 10
+					now := time.Now()
+					elapsed := now.Sub(lastTickTime).Seconds()
+					bps := 8 * float64(bytesLastTicker) / elapsed
 					lastTotalBytesReceived = totalBytesReceivedTmp
+					lastTickTime = now
 
 					averageBps := 8 * float64(totalBytesReceived) / float64(time.Since(since).Seconds())
 					// bps := float64(atomic.LoadUint64(&totalBytesReceived)*8) / time.Since(since).Seconds()
