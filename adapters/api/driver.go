@@ -3,10 +3,12 @@ package api
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/nimbleape/iceperf-agent/adapters"
 	"github.com/nimbleape/iceperf-agent/config"
@@ -31,7 +33,7 @@ type ProviderRes struct {
 }
 type ApiResponse struct {
 	Providers map[string]ProviderRes `json:"providers"`
-	Node      string                 `json:"node"`
+	Node      any                    `json:"node"`
 }
 
 func (d *Driver) GetIceServers(testRunId xid.ID) (map[string]adapters.IceServersConfig, string, error) {
@@ -39,7 +41,9 @@ func (d *Driver) GetIceServers(testRunId xid.ID) (map[string]adapters.IceServers
 
 	if d.Config.RequestUrl != "" {
 
-		client := &http.Client{}
+		client := &http.Client{
+			Timeout: 30 * time.Second,
+		}
 
 		req, err := http.NewRequest("POST", d.Config.RequestUrl, strings.NewReader(`{"testRunID": "`+testRunId.String()+`"}`))
 		req.Header.Add("Content-Type", "application/json")
@@ -63,8 +67,7 @@ func (d *Driver) GetIceServers(testRunId xid.ID) (map[string]adapters.IceServers
 		defer res.Body.Close()
 		//check the code of the response
 		if res.StatusCode != 200 {
-			err = errors.New("error from our api")
-			return providersAndIceServers, "", err
+			return providersAndIceServers, "", fmt.Errorf("API request failed with status %d: %w", res.StatusCode, errors.New("non-200 status code"))
 		}
 
 		responseData, err := io.ReadAll(res.Body)
@@ -77,13 +80,18 @@ func (d *Driver) GetIceServers(testRunId xid.ID) (map[string]adapters.IceServers
 		// log.Info("got a response back from cloudflare api")
 
 		responseServers := ApiResponse{}
-		json.Unmarshal([]byte(responseData), &responseServers)
+		if err := json.Unmarshal([]byte(responseData), &responseServers); err != nil {
+			return providersAndIceServers, "", fmt.Errorf("failed to unmarshal API response: %w", err)
+		}
 
 		// log.WithFields(log.Fields{
 		// 	"response": responseServers,
 		// }).Info("http response")
 
-		node := responseServers.Node
+		node := ""
+		if responseServers.Node != nil {
+			node = fmt.Sprintf("%v", responseServers.Node)
+		}
 
 		for k, q := range responseServers.Providers {
 

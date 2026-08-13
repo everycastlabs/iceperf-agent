@@ -3,9 +3,11 @@ package elixir
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
+	"time"
 
 	"github.com/nimbleape/iceperf-agent/adapters"
 	"github.com/nimbleape/iceperf-agent/config"
@@ -36,7 +38,9 @@ func (d *Driver) GetIceServers() (adapters.IceServersConfig, error) {
 		DoThroughput: d.Config.DoThroughput,
 	}
 
-	client := &http.Client{}
+	client := &http.Client{
+		Timeout: 30 * time.Second,
+	}
 	req, err := http.NewRequest("POST", d.Config.RequestUrl+"&username="+d.Config.HttpUsername, nil)
 
 	if err != nil {
@@ -73,7 +77,9 @@ func (d *Driver) GetIceServers() (adapters.IceServersConfig, error) {
 	}
 
 	responseServers := ElixirResponse{}
-	json.Unmarshal([]byte(responseData), &responseServers)
+	if err := json.Unmarshal([]byte(responseData), &responseServers); err != nil {
+		return iceServers, fmt.Errorf("failed to unmarshal elixir API response: %w", err)
+	}
 
 	for _, r := range responseServers.IceServers {
 

@@ -2,9 +2,11 @@ package metered
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
+	"time"
 
 	"github.com/nimbleape/iceperf-agent/adapters"
 	"github.com/nimbleape/iceperf-agent/config"
@@ -33,7 +35,10 @@ func (d *Driver) GetIceServers() (adapters.IceServersConfig, error) {
 		IceServers: []webrtc.ICEServer{},
 	}
 
-	res, err := http.Get(d.Config.RequestUrl + "?apiKey=" + d.Config.ApiKey)
+	client := &http.Client{
+		Timeout: 30 * time.Second,
+	}
+	res, err := client.Get(d.Config.RequestUrl + "?apiKey=" + d.Config.ApiKey)
 	if err != nil {
 		// log.WithFields(log.Fields{
 		// 	"error": err,
@@ -50,7 +55,9 @@ func (d *Driver) GetIceServers() (adapters.IceServersConfig, error) {
 	}
 
 	var responseServers []MeteredIceServers
-	json.Unmarshal([]byte(responseData), &responseServers)
+	if err := json.Unmarshal([]byte(responseData), &responseServers); err != nil {
+		return iceServers, fmt.Errorf("failed to unmarshal metered API response: %w", err)
+	}
 
 	gotTransports := make(map[string]bool)
 

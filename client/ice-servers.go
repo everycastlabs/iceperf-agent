@@ -130,8 +130,8 @@ func GetIceServers(config *config.Config, logger *slog.Logger, testRunId xid.ID)
 			}
 			is, err := md.GetIceServers()
 			if err != nil {
-				logger.Error("Error getting google ice servers")
-				return nil, "", err
+				logger.Error("Error getting google ice servers", "error", err)
+				return nil, "", fmt.Errorf("failed to get google ice servers: %w", err)
 			}
 			logger.Info("google IceServers", "is", is)
 
@@ -146,8 +146,8 @@ func GetIceServers(config *config.Config, logger *slog.Logger, testRunId xid.ID)
 			}
 			is, err := md.GetIceServers()
 			if err != nil {
-				logger.Error("Error getting metered ice servers")
-				return nil, "", err
+				logger.Error("Error getting metered ice servers", "error", err)
+				return nil, "", fmt.Errorf("failed to get metered ice servers: %w", err)
 			}
 			logger.Info("metered IceServers", "is", is)
 
@@ -162,8 +162,8 @@ func GetIceServers(config *config.Config, logger *slog.Logger, testRunId xid.ID)
 			}
 			is, err := md.GetIceServers()
 			if err != nil {
-				logger.Error("Error getting elixir ice servers")
-				return nil, "", err
+				logger.Error("Error getting stunner ice servers", "error", err)
+				return nil, "", fmt.Errorf("failed to get stunner ice servers: %w", err)
 			}
 			logger.Info("STUNner IceServers", "is", is)
 			iceServers[key] = is
@@ -177,8 +177,8 @@ func GetIceServers(config *config.Config, logger *slog.Logger, testRunId xid.ID)
 			}
 			is, err := td.GetIceServers()
 			if err != nil {
-				logger.Error("Error getting twilio ice servers")
-				return nil, "", err
+				logger.Error("Error getting twilio ice servers", "error", err)
+				return nil, "", fmt.Errorf("failed to get twilio ice servers: %w", err)
 			}
 			logger.Info("twilio IceServers", "is", is)
 
@@ -193,8 +193,8 @@ func GetIceServers(config *config.Config, logger *slog.Logger, testRunId xid.ID)
 			}
 			is, err := xd.GetIceServers()
 			if err != nil {
-				logger.Error("Error getting xirsys ice servers")
-				return nil, "", err
+				logger.Error("Error getting xirsys ice servers", "error", err)
+				return nil, "", fmt.Errorf("failed to get xirsys ice servers: %w", err)
 			}
 			logger.Info("xirsys IceServers", "is", is)
 
@@ -209,8 +209,8 @@ func GetIceServers(config *config.Config, logger *slog.Logger, testRunId xid.ID)
 			}
 			is, err := cd.GetIceServers()
 			if err != nil {
-				logger.Error("Error getting cloudflare ice servers")
-				return nil, "", err
+				logger.Error("Error getting cloudflare ice servers", "error", err)
+				return nil, "", fmt.Errorf("failed to get cloudflare ice servers: %w", err)
 			}
 			logger.Info("cloudflare IceServers", "is", is)
 
@@ -225,9 +225,8 @@ func GetIceServers(config *config.Config, logger *slog.Logger, testRunId xid.ID)
 			}
 			is, err := ed.GetIceServers()
 			if err != nil {
-				logger.Error("Error getting expressturn ice servers")
-
-				return nil, "", err
+				logger.Error("Error getting expressturn ice servers", "error", err)
+				return nil, "", fmt.Errorf("failed to get expressturn ice servers: %w", err)
 			}
 			logger.Info("expressturn IceServers", "is", is)
 
@@ -235,8 +234,8 @@ func GetIceServers(config *config.Config, logger *slog.Logger, testRunId xid.ID)
 		default:
 			is, err := formGenericIceServers(&conf)
 			if err != nil {
-				logger.Error("Error getting generic ice servers")
-				return nil, "", err
+				logger.Error("Error getting generic ice servers", "error", err, "key", key)
+				return nil, "", fmt.Errorf("failed to get generic ice servers for %s: %w", key, err)
 			}
 			logger.Info("default IceServers", "key", key, "is", is)
 
