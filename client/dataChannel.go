@@ -2,23 +2,15 @@ package client
 
 import (
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"time"
 
 	"github.com/nimbleape/iceperf-agent/config"
 	"github.com/nimbleape/iceperf-agent/stats"
-	"github.com/nimbleape/iceperf-agent/util"
 	"github.com/pion/stun/v2"
 	"github.com/pion/webrtc/v4"
 )
-
-type PC struct {
-	pc *webrtc.PeerConnection
-}
-
-func (pc *PC) Stop() {
-
-}
 
 type ConnectionPair struct {
 	OfferPC                 *webrtc.PeerConnection
@@ -33,6 +25,8 @@ type ConnectionPair struct {
 	stats                   *stats.Stats
 	doThroughputTest        bool
 	closeChan               chan struct{}
+	bufferedAmountLowThreshold uint64
+	maxBufferedAmount          uint64
 }
 
 func NewConnectionPair(config *config.Config, iceServerInfo *stun.URI, provider string, stats *stats.Stats, doThroughputTest bool, closeChan chan struct{}) (c *ConnectionPair, err error) {
@@ -43,15 +37,25 @@ func newConnectionPair(cc *config.Config, iceServerInfo *stun.URI, provider stri
 	logOfferer := cc.Logger.With("peer", "Offerer")
 	logAnswerer := cc.Logger.With("peer", "Answerer")
 
+	bufferedAmountLowThreshold := uint64(512 * 1024) // 512 KB default
+	maxBufferedAmount := uint64(1024 * 1024)         // 1 MB default
+	
+	if doThroughputTest {
+		bufferedAmountLowThreshold = 4 * 1024 * 1024 // 4 MB for throughput tests
+		maxBufferedAmount = 8 * 1024 * 1024          // 8 MB for throughput tests
+	}
+
 	cp := &ConnectionPair{
-		config:           cc,
-		LogOfferer:       logOfferer,
-		LogAnswerer:      logAnswerer,
-		iceServerInfo:    iceServerInfo,
-		provider:         provider,
-		stats:            stats,
-		doThroughputTest: doThroughputTest,
-		closeChan:        closeChan,
+		config:                    cc,
+		LogOfferer:                logOfferer,
+		LogAnswerer:               logAnswerer,
+		iceServerInfo:             iceServerInfo,
+		provider:                  provider,
+		stats:                     stats,
+		doThroughputTest:          doThroughputTest,
+		closeChan:                 closeChan,
+		bufferedAmountLowThreshold: bufferedAmountLowThreshold,
+		maxBufferedAmount:          maxBufferedAmount,
 	}
 
 	config := webrtc.Configuration{}
@@ -63,41 +67,50 @@ func newConnectionPair(cc *config.Config, iceServerInfo *stun.URI, provider stri
 	config.ICETransportPolicy = cc.WebRTCConfig.ICETransportPolicy
 	config.SDPSemantics = webrtc.SDPSemanticsUnifiedPlanWithFallback
 
-	//we only want offerer to force turn (if we are)
-	cp.createOfferer(config)
+	// Only offerer should force TURN (if configured)
+	if err := cp.createOfferer(config); err != nil {
+		return nil, fmt.Errorf("failed to create offerer: %w", err)
+	}
 
-	// think we want to leave the answerer without any ice servers so we only get the host candidates.... I think
-	// to get the tests working I'm passing the turn server into both....
-	// but I don't think that should be required
-	cp.createAnswerer(webrtc.Configuration{
+	// Answerer uses minimal STUN server to get host candidates
+	// Note: Currently passing TURN server to both for testing purposes
+	if err := cp.createAnswerer(webrtc.Configuration{
 		ICEServers: []webrtc.ICEServer{
 			{
 				URLs: []string{"stun:stun.l.google.com:19302"},
 			},
 		},
-	})
+	}); err != nil {
+		return nil, fmt.Errorf("failed to create answerer: %w", err)
+	}
 
 	return cp, nil
 }
 
-func (cp *ConnectionPair) setRemoteDescription(pc *webrtc.PeerConnection, sdp []byte) {
+func (cp *ConnectionPair) setRemoteDescription(pc *webrtc.PeerConnection, sdp []byte) error {
 	var desc webrtc.SessionDescription
-	err := json.Unmarshal(sdp, &desc)
-	util.Check(err)
+	if err := json.Unmarshal(sdp, &desc); err != nil {
+		return err
+	}
 
 	// Apply the desc as the remote description
-	err = pc.SetRemoteDescription(desc)
-	util.Check(err)
+	return pc.SetRemoteDescription(desc)
 }
 
-func (cp *ConnectionPair) createOfferer(config webrtc.Configuration) {
+func (cp *ConnectionPair) createOfferer(config webrtc.Configuration) error {
 	// Create a new PeerConnection
 	settingEngine := webrtc.SettingEngine{}
-	settingEngine.SetICETimeouts(5*time.Second, 10*time.Second, 2*time.Second)
+	settingEngine.SetICETimeouts(
+		cp.config.Timeouts.ICEGathering,
+		cp.config.Timeouts.ICEConnection,
+		cp.config.Timeouts.ICECheckInterval,
+	)
 	api := webrtc.NewAPI(webrtc.WithSettingEngine(settingEngine))
 
 	pc, err := api.NewPeerConnection(config)
-	util.Check(err)
+	if err != nil {
+		return fmt.Errorf("failed to create offerer peer connection: %w", err)
+	}
 
 	buf := make([]byte, 1024)
 
@@ -114,7 +127,9 @@ func (cp *ConnectionPair) createOfferer(config webrtc.Configuration) {
 
 	// Create a datachannel with label 'data'
 	dc, err := pc.CreateDataChannel("data", options)
-	util.Check(err)
+	if err != nil {
+		return fmt.Errorf("failed to create data channel: %w", err)
+	}
 
 	cp.OfferDC = dc
 
@@ -150,7 +165,7 @@ func (cp *ConnectionPair) createOfferer(config webrtc.Configuration) {
 					break
 				}
 
-				if dc.BufferedAmount() > maxBufferedAmount {
+				if dc.BufferedAmount() > cp.maxBufferedAmount {
 					// Wait until the bufferedAmount becomes lower than the threshold
 					<-sendMoreCh
 				}
@@ -159,7 +174,7 @@ func (cp *ConnectionPair) createOfferer(config webrtc.Configuration) {
 
 		// Set bufferedAmountLowThreshold so that we can get notified when
 		// we can send more
-		dc.SetBufferedAmountLowThreshold(bufferedAmountLowThreshold)
+		dc.SetBufferedAmountLowThreshold(cp.bufferedAmountLowThreshold)
 
 		// This callback is made when the current bufferedAmount becomes lower than the threshold
 		dc.OnBufferedAmountLow(func() {
@@ -188,16 +203,15 @@ func (cp *ConnectionPair) createOfferer(config webrtc.Configuration) {
 		})
 	}
 	cp.OfferPC = pc
+	return nil
 }
 
-func (cp *ConnectionPair) createAnswerer(config webrtc.Configuration) {
-
-	// settingEngine := webrtc.SettingEngine{}
-	// settingEngine.SetICETimeouts(5, 5, 2)
-	// api := webrtc.NewAPI(webrtc.WithSettingEngine(settingEngine))
+func (cp *ConnectionPair) createAnswerer(config webrtc.Configuration) error {
 	// Create a new PeerConnection
 	pc, err := webrtc.NewPeerConnection(config)
-	util.Check(err)
+	if err != nil {
+		return fmt.Errorf("failed to create answerer peer connection: %w", err)
+	}
 
 	if cp.iceServerInfo.Scheme == stun.SchemeTypeTURN || cp.iceServerInfo.Scheme == stun.SchemeTypeTURNS {
 
@@ -222,11 +236,29 @@ func (cp *ConnectionPair) createAnswerer(config webrtc.Configuration) {
 				since := time.Now()
 
 				lastTotalBytesReceived := uint64(0)
+				lastTickTime := since
+
+				// Create ticker with proper cleanup
+				ticker := time.NewTicker(cp.config.Timeouts.ThroughputTicker)
+				defer ticker.Stop()
+				
 				// Start printing out the observed throughput
-				for range time.NewTicker(100 * time.Millisecond).C {
+				for {
+					select {
+					case <-ticker.C:
 					//check if this pc is closed and break out
-					if pc.ConnectionState() != webrtc.PeerConnectionStateConnected {
-						break
+						connState := pc.ConnectionState()
+						if connState != webrtc.PeerConnectionStateConnected {
+							// Calculate final throughput before returning
+							bps := 8 * float64(totalBytesReceived) / float64(time.Since(since).Seconds())
+							cp.LogAnswerer.Info("On ticker: Final calculated throughput (connection closed)", "throughput", bps/1024/1024,
+								"eventTime", time.Now(),
+								"timeSinceStartMs", time.Since(since).Milliseconds(),
+								"connectionState", connState.String())
+							if cp.doThroughputTest {
+								cp.stats.AddThroughput(time.Since(since).Milliseconds(), bps/1024/1024, 0)
+							}
+							return
 					}
 					_, totalBytesReceivedTmp, _, _, ok := getBytesStats(pc, dc)
 					if ok {
@@ -237,8 +269,11 @@ func (cp *ConnectionPair) createAnswerer(config webrtc.Configuration) {
 
 					bytesLastTicker := totalBytesReceived - lastTotalBytesReceived
 
-					bps := 8 * float64(bytesLastTicker) * 10
+					now := time.Now()
+					elapsed := now.Sub(lastTickTime).Seconds()
+					bps := 8 * float64(bytesLastTicker) / elapsed
 					lastTotalBytesReceived = totalBytesReceivedTmp
+					lastTickTime = now
 
 					averageBps := 8 * float64(totalBytesReceived) / float64(time.Since(since).Seconds())
 					// bps := float64(atomic.LoadUint64(&totalBytesReceived)*8) / time.Since(since).Seconds()
@@ -246,15 +281,18 @@ func (cp *ConnectionPair) createAnswerer(config webrtc.Configuration) {
 					if cp.doThroughputTest {
 						cp.stats.AddThroughput(time.Since(since).Milliseconds(), averageBps/1024/1024, bps/1024/1024)
 					}
-				}
-
+					case <-cp.closeChan:
+						// Cleanup when close signal received
+						// Calculate final throughput before returning
 				bps := 8 * float64(totalBytesReceived) / float64(time.Since(since).Seconds())
-				// bps := float64(atomic.LoadUint64(&totalBytesReceived)*8) / time.Since(since).Seconds()
-				cp.LogAnswerer.Info("On ticker: Calculated throughput", "throughput", bps/1024/1024,
+						cp.LogAnswerer.Info("On ticker: Final calculated throughput", "throughput", bps/1024/1024,
 					"eventTime", time.Now(),
 					"timeSinceStartMs", time.Since(since).Milliseconds())
 				if cp.doThroughputTest {
 					cp.stats.AddThroughput(time.Since(since).Milliseconds(), bps/1024/1024, 0)
+						}
+						return
+					}
 				}
 			})
 
@@ -287,6 +325,7 @@ func (cp *ConnectionPair) createAnswerer(config webrtc.Configuration) {
 	}
 
 	cp.AnswerPC = pc
+	return nil
 }
 
 func getBytesStats(pc *webrtc.PeerConnection, dc *webrtc.DataChannel) (uint64, uint64, uint64, uint64, bool) {
@@ -307,7 +346,15 @@ func getBytesStats(pc *webrtc.PeerConnection, dc *webrtc.DataChannel) (uint64, u
 		return 0, 0, 0, 0, ok
 	}
 
-	iceTransportStats := stats["iceTransport"].(webrtc.TransportStats)
+	iceTransportStatsRaw, ok := stats["iceTransport"]
+	if !ok {
+		return 0, 0, 0, 0, false
+	}
 
-	return dcStats.BytesSent, dcStats.BytesReceived, iceTransportStats.BytesSent, iceTransportStats.BytesReceived, ok
+	iceTransportStats, ok := iceTransportStatsRaw.(webrtc.TransportStats)
+	if !ok {
+		return 0, 0, 0, 0, false
+	}
+
+	return dcStats.BytesSent, dcStats.BytesReceived, iceTransportStats.BytesSent, iceTransportStats.BytesReceived, true
 }

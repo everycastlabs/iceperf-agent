@@ -3,10 +3,12 @@ package xirsys
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/nimbleape/iceperf-agent/adapters"
 	"github.com/nimbleape/iceperf-agent/config"
@@ -35,7 +37,9 @@ type XirsysResponse struct {
 }
 
 func (d *Driver) GetIceServers() (adapters.IceServersConfig, error) {
-	client := &http.Client{}
+	client := &http.Client{
+		Timeout: 30 * time.Second,
+	}
 
 	iceServers := adapters.IceServersConfig{
 		IceServers: []webrtc.ICEServer{},
@@ -80,7 +84,9 @@ func (d *Driver) GetIceServers() (adapters.IceServersConfig, error) {
 	}
 
 	responseServers := XirsysResponse{}
-	json.Unmarshal([]byte(responseData), &responseServers)
+	if err := json.Unmarshal([]byte(responseData), &responseServers); err != nil {
+		return iceServers, fmt.Errorf("failed to unmarshal xirsys API response: %w", err)
+	}
 
 	gotTransports := make(map[string]bool)
 

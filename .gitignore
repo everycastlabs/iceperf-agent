@@ -8,6 +8,9 @@
 *.dll
 *.so
 *.dylib
+/iceperf
+/iceperf-agent
+/iceperf-agent-patched
 
 # Test binary, built with `go test -c`
 *.test

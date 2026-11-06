@@ -3,10 +3,12 @@ package config
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
 	"reflect"
+	"time"
 
 	"github.com/pion/webrtc/v4"
 	"github.com/prometheus/client_golang/prometheus"
@@ -66,12 +68,22 @@ type TimerConfig struct {
 	Interval int  `json:"interval" yaml:"interval"`
 }
 
+type TimeoutConfig struct {
+	HTTPClient      time.Duration `json:"httpClient" yaml:"http_client"`           // HTTP client timeout (default: 30s)
+	ICEGathering    time.Duration `json:"iceGathering" yaml:"ice_gathering"`       // ICE gathering timeout (default: 5s)
+	ICEConnection   time.Duration `json:"iceConnection" yaml:"ice_connection"`    // ICE connection timeout (default: 10s)
+	ICECheckInterval time.Duration `json:"iceCheckInterval" yaml:"ice_check_interval"` // ICE check interval (default: 2s)
+	ThroughputTicker time.Duration `json:"throughputTicker" yaml:"throughput_ticker"`   // Throughput stats ticker interval (default: 100ms)
+	StopDelay       time.Duration `json:"stopDelay" yaml:"stop_delay"`              // Delay before stopping connections (default: 1s)
+}
+
 type Config struct {
 	NodeID    string               `json:"nodeId" yaml:"node_id"`
 	ICEConfig map[string]ICEConfig `json:"iceServers" yaml:"ice_servers"`
 	Logging   LoggingConfig        `json:"logging" yaml:"logging"`
 	Timer     TimerConfig          `json:"timer" yaml:"timer"`
 	Api       ApiConfig            `json:"api" yaml:"api"`
+	Timeouts  TimeoutConfig        `json:"timeouts" yaml:"timeouts"`
 
 	WebRTCConfig webrtc.Configuration
 	// TODO the following should be different for answerer and offerer sides
@@ -122,17 +134,51 @@ func mergeStructs(cValue, respValue reflect.Value) {
 func NewConfig(confString string) (*Config, error) {
 	c := &Config{
 		ServiceName: "ICEPerf",
+		Timeouts: TimeoutConfig{
+			HTTPClient:      30 * time.Second,
+			ICEGathering:    5 * time.Second,
+			ICEConnection:   10 * time.Second,
+			ICECheckInterval: 2 * time.Second,
+			ThroughputTicker: 100 * time.Millisecond,
+			StopDelay:       1 * time.Second,
+		},
 	}
 	if confString != "" {
 		if err := yaml.Unmarshal([]byte(confString), c); err != nil {
 			return nil, err
 		}
 	}
+	// Ensure defaults are set if not provided in config
+	c.setTimeoutDefaults()
 	return c, nil
 }
 
+func (c *Config) setTimeoutDefaults() {
+	if c.Timeouts.HTTPClient == 0 {
+		c.Timeouts.HTTPClient = 30 * time.Second
+	}
+	if c.Timeouts.ICEGathering == 0 {
+		c.Timeouts.ICEGathering = 5 * time.Second
+	}
+	if c.Timeouts.ICEConnection == 0 {
+		c.Timeouts.ICEConnection = 10 * time.Second
+	}
+	if c.Timeouts.ICECheckInterval == 0 {
+		c.Timeouts.ICECheckInterval = 2 * time.Second
+	}
+	if c.Timeouts.ThroughputTicker == 0 {
+		c.Timeouts.ThroughputTicker = 100 * time.Millisecond
+	}
+	if c.Timeouts.StopDelay == 0 {
+		c.Timeouts.StopDelay = 1 * time.Second
+	}
+}
+
 func (c *Config) UpdateConfigFromApi() error {
-	httpClient := &http.Client{}
+	c.setTimeoutDefaults()
+	httpClient := &http.Client{
+		Timeout: c.Timeouts.HTTPClient,
+	}
 
 	req, err := http.NewRequest("GET", c.Api.URI, nil)
 	req.Header.Add("Content-Type", "application/json")
@@ -150,8 +196,7 @@ func (c *Config) UpdateConfigFromApi() error {
 	defer res.Body.Close()
 	//check the code of the response
 	if res.StatusCode != 200 {
-		err = errors.New("error from our api " + res.Status)
-		return err
+		return fmt.Errorf("API request failed with status %s: %w", res.Status, errors.New("non-200 status code"))
 	}
 
 	responseData, err := io.ReadAll(res.Body)
@@ -159,15 +204,16 @@ func (c *Config) UpdateConfigFromApi() error {
 		return err
 	}
 	responseConfig := Config{}
-	json.Unmarshal([]byte(responseData), &responseConfig)
+	if err := json.Unmarshal([]byte(responseData), &responseConfig); err != nil {
+		return fmt.Errorf("failed to unmarshal API response: %w", err)
+	}
 
-	//go and merge in values from the API into the config
-
-	//lets just do the basics for now....
-	//this needs a lot more work
+	// Merge in values from the API into the config
 	c.NodeID = responseConfig.NodeID
 	c.ICEConfig = responseConfig.ICEConfig
 	c.Logging = responseConfig.Logging
-	// mergeConfigs(c, responseConfig)
+	if responseConfig.Timeouts.HTTPClient != 0 {
+		c.Timeouts = responseConfig.Timeouts
+	}
 	return nil
 }

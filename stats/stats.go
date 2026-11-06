@@ -6,7 +6,6 @@ import (
 )
 
 // Stats represents a statistics object
-// Stats represents a statistics object
 type Stats struct {
 	TestRunID                              string            `json:"testRunID"`
 	Labels                                 map[string]string `json:"labels"`
@@ -38,7 +37,7 @@ func NewStats(testRunID string, testRunStartedAt time.Time) *Stats {
 		TestRunID:         testRunID,
 		TestRunStartedAt:  testRunStartedAt,
 		Throughput:        make(map[int64]float64), // Initialize the Throughput map
-		InstantThroughput: make(map[int64]float64), // Initialize the Throughput map
+		InstantThroughput: make(map[int64]float64), // Initialize the InstantThroughput map
 		Connected:         false,
 	}
 
